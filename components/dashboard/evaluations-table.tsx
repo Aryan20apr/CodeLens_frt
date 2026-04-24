@@ -1,3 +1,5 @@
+"use client";
+
 import { StatusChip } from "@/components/ui/status-chip";
 
 interface Evaluation {
