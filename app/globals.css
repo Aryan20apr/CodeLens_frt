@@ -1,26 +1,141 @@
 @import "tailwindcss";
 
+/* ============================================================
+   CodeLens — Kinetic Architect Design System
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surface hierarchy — matches Stitch export (Kinetic Architect base) */
+  --surface:                  #0a0a0b;
+  --surface-dim:              #0a0a0b;
+  --surface-bright:           #39393b;
+  --surface-lowest:           #0e0e10;
+  --surface-low:              #1c1b1d;
+  --surface-container:        #201f22;
+  --surface-high:             #2a2a2c;
+  --surface-highest:          #353437;
+  --surface-variant:          #353437;
+
+  /* Primary — Indigo */
+  --primary:                  #c0c1ff;
+  --primary-container:        #8083ff;
+  --on-primary:               #1000a9;
+  --inverse-primary:          #494bd6;
+
+  /* Secondary */
+  --secondary:                #c0c1ff;
+  --secondary-container:      #42447b;
+  --on-secondary:             #292a60;
+  --on-secondary-container:   #b2b3f2;
+
+  /* Tertiary — Amber */
+  --tertiary:                 #ffb783;
+  --tertiary-container:       #d97721;
+
+  /* Error */
+  --error:                    #ffb4ab;
+  --error-container:          #93000a;
+
+  /* Text */
+  --on-surface:               #e5e1e4;
+  --on-surface-variant:       #c7c4d7;
+
+  /* Outline */
+  --outline:                  #908fa0;
+  --outline-variant:          #464554;
+
+  /* Shadows — Indigo-tinted ambient */
+  --shadow-card:   0 20px 40px rgba(0,0,0,0.4), 0 0 10px rgba(99,102,241,0.05);
+  --shadow-float:  0 32px 64px rgba(0,0,0,0.5), 0 0 20px rgba(99,102,241,0.08);
+
+  /* Gradients — headline text uses brand wash; CTAs match Stitch HTML */
+  --gradient-primary: linear-gradient(135deg, #c0c1ff 0%, #818cf8 100%);
+  --gradient-cta: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Map to Tailwind color utilities */
+  --color-background:          var(--surface);
+  --color-foreground:          var(--on-surface);
+  --color-surface:             var(--surface);
+  --color-surface-lowest:      var(--surface-lowest);
+  --color-surface-low:         var(--surface-low);
+  --color-surface-container:   var(--surface-container);
+  --color-surface-high:        var(--surface-high);
+  --color-surface-highest:     var(--surface-highest);
+  --color-surface-variant:     var(--surface-variant);
+  --color-surface-bright:      var(--surface-bright);
+  --color-primary:             var(--primary);
+  --color-primary-container:   var(--primary-container);
+  --color-on-primary:          var(--on-primary);
+  --color-secondary:           var(--secondary);
+  --color-secondary-container: var(--secondary-container);
+  --color-on-secondary-container: var(--on-secondary-container);
+  --color-tertiary:            var(--tertiary);
+  --color-tertiary-container:  var(--tertiary-container);
+  --color-error:               var(--error);
+  --color-error-container:     var(--error-container);
+  --color-on-surface:          var(--on-surface);
+  --color-on-surface-variant:  var(--on-surface-variant);
+  --color-outline:             var(--outline);
+  --color-outline-variant:     var(--outline-variant);
+
+  /* Fonts */
+  --font-sans:      var(--font-inter);
+  --font-headline:  var(--font-geist-sans);
+  --font-label:     var(--font-space-grotesk);
+  --font-mono:      var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ============================================================
+   Base
+   ============================================================ */
+
+html { color-scheme: dark; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* ============================================================
+   Utility classes
+   ============================================================ */
+
+/* Ghost border: felt, not seen */
+.ghost-border {
+  border: 1px solid rgba(70, 69, 84, 0.25);
+}
+
+/* Primary gradient CTA — Stitch “machined” indigo sheen + indigo bloom */
+.btn-primary {
+  background: var(--gradient-cta);
+  color: #ffffff;
+  box-shadow:
+    0 4px 14px 0 rgba(99, 102, 241, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: opacity 0.15s ease, transform 0.12s ease;
+}
+.btn-primary:hover  { opacity: 0.95; transform: scale(1.02); }
+.btn-primary:active { transform: scale(0.98); }
+
+/* Glassmorphism floating panel */
+.glass-panel {
+  background: rgba(53, 52, 55, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Indigo bloom glow for active indicators */
+.indigo-bloom {
+  box-shadow: 0 0 0 4px rgba(99,102,241,0.15), 0 0 16px rgba(99,102,241,0.12);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--surface-lowest); }
+::-webkit-scrollbar-thumb { background: var(--outline-variant); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--outline); }

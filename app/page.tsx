@@ -1,65 +1,128 @@
-import Image from "next/image";
+import Link from "next/link";
+import { BugPlay, Code2 } from "lucide-react";
+import { Hero } from "@/components/landing/hero";
+import { StatsBar } from "@/components/landing/stats-bar";
+import { FeaturesGrid } from "@/components/landing/features-grid";
+import { PipelineSteps } from "@/components/landing/pipeline-steps";
+import { ResourceStrip } from "@/components/landing/resource-strip";
 
-export default function Home() {
+const NAV = [
+  { label: "Features", href: "#features" },
+  { label: "Docs", href: "#docs" },
+  { label: "Pricing", href: "#pricing" },
+  { label: "Blog", href: "#blog" },
+] as const;
+
+export default function LandingPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <>
+      <header
+        className="sticky top-0 inset-x-0 z-50 w-full border-b border-white/5 backdrop-blur-xl transition-colors"
+        style={{
+          background: "rgba(10, 10, 11, 0.8)",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.4)",
+        }}
+      >
+        <div className="flex items-center justify-between px-6 py-4 max-w-screen-2xl mx-auto">
+          <Link
+            href="/"
+            className="text-2xl font-bold tracking-tighter flex items-center gap-2 text-white"
+            style={{ fontFamily: "var(--font-geist-sans)", letterSpacing: "-0.02em" }}
+          >
+            <BugPlay className="size-7 text-primary shrink-0" aria-hidden />
+            CodeLens
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium tracking-tight" aria-label="Primary">
+            {NAV.map(({ label, href }) => (
+              <Link
+                key={label}
+                href={href}
+                className="text-[#e5e1e4] hover:text-primary transition-colors duration-200"
+                style={{ fontFamily: "var(--font-inter)" }}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-3 md:gap-4">
+            <Link
+              href="/login"
+              className="hidden sm:inline text-sm font-medium tracking-tight px-4 py-2 rounded-lg text-white hover:text-primary transition-colors duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              style={{ fontFamily: "var(--font-inter)" }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              Sign In
+            </Link>
+            <Link
+              href="/register"
+              className="btn-primary text-sm font-medium tracking-tight px-5 py-2.5 rounded-lg flex items-center gap-2"
+              style={{ fontFamily: "var(--font-inter)" }}
             >
-              Learning
-            </a>{" "}
-            center.
+              Get Started
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col">
+        <Hero />
+        <StatsBar />
+        <FeaturesGrid />
+        <PipelineSteps />
+        <ResourceStrip />
+
+        <section
+          id="cta"
+          className="px-6 py-24 text-center border-t border-white/5"
+          style={{ background: "var(--surface-container)" }}
+        >
+          <h2
+            className="text-3xl lg:text-4xl font-bold tracking-tight mb-4 text-white"
+            style={{ fontFamily: "var(--font-geist-sans)", letterSpacing: "-0.02em" }}
+          >
+            Ready to evaluate your code?
+          </h2>
+          <p className="text-base mb-8 text-[#d1d5db]" style={{ fontFamily: "var(--font-inter)" }}>
+            Join 1,200+ developers building better, safer software with CodeLens.
+          </p>
+          <Link
+            href="/register"
+            className="btn-primary inline-flex items-center gap-2 px-8 py-4 rounded-lg text-base font-semibold"
+            style={{ fontFamily: "var(--font-inter)" }}
+          >
+            Start for Free — No Credit Card
+          </Link>
+        </section>
+      </main>
+
+      <footer className="w-full py-12 bg-[#070708] border-t border-white/5">
+        <div className="flex flex-col md:flex-row justify-between items-center px-8 max-w-7xl mx-auto gap-6">
+          <div
+            className="font-bold text-[#e5e1e4] flex items-center gap-2"
+            style={{ fontFamily: "var(--font-geist-sans)", letterSpacing: "-0.02em" }}
+          >
+            <BugPlay className="size-4 text-primary shrink-0" aria-hidden />
+            CodeLens
+          </div>
+          <a
+            href="https://github.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-xs uppercase tracking-widest text-[#d1d5db] hover:text-white transition-colors opacity-80 hover:opacity-100"
+            style={{ fontFamily: "var(--font-space-grotesk)" }}
+          >
+            <Code2 className="size-3.5 shrink-0" aria-hidden />
+            GitHub
+          </a>
+          <p
+            className="text-xs uppercase tracking-widest text-[#d1d5db] text-center md:text-right"
+            style={{ fontFamily: "var(--font-space-grotesk)" }}
+          >
+            © {new Date().getFullYear()} CODELENS
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      </footer>
+    </>
   );
 }
