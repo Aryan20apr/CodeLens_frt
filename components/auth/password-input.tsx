@@ -10,6 +10,9 @@ interface PasswordInputProps {
   placeholder?: string;
   label: string;
   autoComplete?: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  disabled?: boolean;
 }
 
 export function PasswordInput({
@@ -18,6 +21,9 @@ export function PasswordInput({
   placeholder = "Enter password",
   label,
   autoComplete = "current-password",
+  value,
+  onChange,
+  disabled = false,
 }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
 
@@ -38,7 +44,10 @@ export function PasswordInput({
           placeholder={placeholder}
           autoComplete={autoComplete}
           required
-          className="w-full rounded-lg px-4 py-3 text-sm pr-11 outline-none transition-colors"
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          className="w-full rounded-lg px-4 py-3 text-sm pr-11 outline-none transition-colors disabled:opacity-60"
           style={{
             background: "var(--surface-container)",
             color: "var(--on-surface)",
@@ -57,7 +66,8 @@ export function PasswordInput({
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 transition-opacity hover:opacity-70"
+          disabled={disabled}
+          className="absolute right-3 top-1/2 -translate-y-1/2 transition-opacity hover:opacity-70 disabled:opacity-50"
           style={{ color: "var(--on-surface-variant)" }}
           aria-label={visible ? "Hide password" : "Show password"}
         >

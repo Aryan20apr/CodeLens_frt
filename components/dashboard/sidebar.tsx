@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   LayoutDashboard,
   BugPlay,
@@ -9,7 +10,10 @@ import {
   FileText,
   GitBranch,
   Settings,
+  LogOut,
 } from "lucide-react";
+import { getAuthSession, clearAuthSession } from "@/lib/auth/session";
+import { logoutWithAccessToken } from "@/lib/auth/logout-user";
 
 const NAV_ITEMS = [
   { label: "Dashboard",   href: "/dashboard",            icon: <LayoutDashboard size={18} /> },
@@ -21,6 +25,26 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [logoutPending, setLogoutPending] = useState(false);
+
+  async function handleLogout() {
+    if (logoutPending) return;
+    setLogoutPending(true);
+    const session = getAuthSession();
+    try {
+      if (session?.accessToken) {
+        await logoutWithAccessToken(session.accessToken);
+      }
+    } catch {
+      // Still clear local session if the request fails
+    } finally {
+      clearAuthSession();
+      setLogoutPending(false);
+      router.push("/login");
+      router.refresh();
+    }
+  }
 
   return (
     <aside
@@ -70,10 +94,26 @@ export function Sidebar() {
         >
           A
         </span>
-        <div className="flex flex-col">
-          <span className="text-xs font-semibold" style={{ color: "var(--on-surface)", fontFamily: "var(--font-space-grotesk)" }}>Aryan Singh</span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span
+            className="text-xs font-semibold truncate"
+            style={{ color: "var(--on-surface)", fontFamily: "var(--font-space-grotesk)" }}
+          >
+            Aryan Singh
+          </span>
           <span className="text-xs" style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}>Pro Plan</span>
         </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={logoutPending}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ color: "var(--on-surface-variant)" }}
+          title="Log out"
+          aria-label="Log out"
+        >
+          <LogOut size={16} className={logoutPending ? "animate-pulse" : ""} />
+        </button>
       </div>
     </aside>
   );
