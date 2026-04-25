@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BugPlay, Code2 } from "lucide-react";
+import { RouteGuard } from "@/components/auth/route-guard";
 import { Hero } from "@/components/landing/hero";
 import { StatsBar } from "@/components/landing/stats-bar";
 import { FeaturesGrid } from "@/components/landing/features-grid";
@@ -15,6 +16,7 @@ const NAV = [
 
 export default function LandingPage() {
   return (
+    <RouteGuard mode="guest-only">
     <>
       <header
         className="sticky top-0 inset-x-0 z-50 w-full border-b border-white/5 backdrop-blur-xl transition-colors"
@@ -124,5 +126,6 @@ export default function LandingPage() {
         </div>
       </footer>
     </>
+    </RouteGuard>
   );
 }
