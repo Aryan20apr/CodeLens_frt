@@ -26,7 +26,7 @@ export interface ApiErrorBody {
 
 export interface AuthSession {
   accessToken: string;
-  user: AuthUser;
+  user?: AuthUser;
   /** Present when the last successful auth was `register` (or if API returns it elsewhere). */
   apiKey?: string;
 }

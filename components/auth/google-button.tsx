@@ -1,5 +1,7 @@
 "use client";
 
+import { startOAuth } from "@/lib/auth/oauth";
+
 export function GoogleButton({
   label = "Continue with Google",
   className = "",
@@ -11,7 +13,7 @@ export function GoogleButton({
     <button
       type="button"
       onClick={() => {
-        /* TODO: trigger Google OAuth */
+        startOAuth("google");
       }}
       className={`w-full min-w-0 sm:basis-0 sm:flex-1 flex items-center justify-center gap-2 sm:gap-3 py-3 px-3 sm:px-4 rounded-lg font-semibold text-sm transition-colors ${className}`.trim()}
       style={{
