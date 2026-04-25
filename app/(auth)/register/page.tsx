@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { GithubButton } from "@/components/auth/github-button";
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons";
 import { RegisterForm } from "@/components/auth/register-form";
 
 export const metadata: Metadata = { title: "Create Account" };
@@ -19,7 +19,7 @@ export default function RegisterPage() {
         </p>
       </div>
 
-      <GithubButton label="Continue with GitHub" />
+      <SocialAuthButtons />
 
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px" style={{ background: "var(--outline-variant)" }} />

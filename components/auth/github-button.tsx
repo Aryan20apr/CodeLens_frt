@@ -1,13 +1,19 @@
 "use client";
 
-export function GithubButton({ label = "Continue with GitHub" }: { label?: string }) {
+export function GithubButton({
+  label = "Continue with GitHub",
+  className = "",
+}: {
+  label?: string;
+  className?: string;
+}) {
   return (
     <button
       type="button"
       onClick={() => {
         /* TODO: trigger GitHub OAuth */
       }}
-      className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-lg font-semibold text-sm transition-colors"
+      className={`w-full min-w-0 sm:basis-0 sm:flex-1 flex items-center justify-center gap-2 sm:gap-3 py-3 px-3 sm:px-4 rounded-lg font-semibold text-sm transition-colors ${className}`.trim()}
       style={{
         background: "var(--surface-highest)",
         color: "var(--on-surface)",
