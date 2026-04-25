@@ -1,4 +1,4 @@
-import type { AuthSession, RegisterResponse } from "@/lib/auth/types";
+import type { AuthSession, AuthUser, RegisterResponse, LoginResponse } from "@/lib/auth/types";
 
 const STORAGE_KEY = "codelens_auth";
 
@@ -7,14 +7,31 @@ function assertClient(): void {
     throw new Error("Session helpers are only available in the browser");
 }
 
-export function setAuthFromRegister(response: RegisterResponse): void {
+function toSession(
+  r: { accessToken: string; user: AuthUser },
+  apiKey?: string,
+): AuthSession {
+  const session: AuthSession = { accessToken: r.accessToken, user: r.user };
+  if (apiKey != null) session.apiKey = apiKey;
+  return session;
+}
+
+function persist(res: AuthSession) {
   assertClient();
-  const session: AuthSession = {
-    accessToken: response.accessToken,
-    apiKey: response.apiKey,
-    user: response.user,
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(res));
+}
+
+export function setAuthFromRegister(response: RegisterResponse) {
+  persist(
+    toSession(
+      { accessToken: response.accessToken, user: response.user },
+      response.apiKey,
+    ),
+  );
+}
+
+export function setAuthFromLogin(response: LoginResponse) {
+  persist(toSession(response));
 }
 
 export function getAuthSession(): AuthSession | null {
