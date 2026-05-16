@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { tryRefreshSession } from "@/lib/auth/refresh-session";
+import { getAuthResolutionState, setAuthResolutionState } from "@/lib/auth/auth-resolution";
 import { CODELENS_AUTH_CHANGE_EVENT, getAuthSession, setAuthFromLogin } from "@/lib/auth/session";
 
 interface RouteGuardProps {
@@ -16,24 +17,40 @@ function isSignedIn() {
   return (getAuthSession()?.accessToken ?? "") !== "";
 }
 
+function getInitialGuardState(): GuardState {
+  const cached = getAuthResolutionState();
+  if (cached !== "unknown") return cached;
+  return isSignedIn() ? "authed" : "resolving";
+}
+
 export function RouteGuard({ mode, children }: RouteGuardProps) {
   const router = useRouter();
-  const [state, setState] = useState<GuardState>("resolving");
+  const [state, setState] = useState<GuardState>(() => getInitialGuardState());
 
   // Initial resolve: in-memory / session access token, else cookie-based refresh.
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const cached = getAuthResolutionState();
+    if (cached !== "unknown") {
+      setState(cached);
+      return;
+    }
+
+    if (isSignedIn()) {
+      setAuthResolutionState("authed");
+      setState("authed");
+      return;
+    }
+
     let cancelled = false;
     (async () => {
-      if (isSignedIn()) {
-        if (!cancelled) setState("authed");
-        return;
-      }
       const next = await tryRefreshSession();
       if (cancelled) return;
       if (next) {
         setAuthFromLogin(next);
+        setAuthResolutionState("authed");
         setState("authed");
       } else {
+        setAuthResolutionState("unauthed");
         setState("unauthed");
       }
     })();
@@ -46,14 +63,23 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
   useEffect(() => {
     function onAuthStateChange() {
       const authed = isSignedIn();
-      if (authed) setState("authed");
-      else setState("unauthed");
+      const next: GuardState = authed ? "authed" : "unauthed";
+      setAuthResolutionState(next);
+      setState(next);
+    }
+    function onPageShow() {
+      if (isSignedIn()) {
+        setAuthResolutionState("authed");
+        setState("authed");
+      }
     }
     window.addEventListener(CODELENS_AUTH_CHANGE_EVENT, onAuthStateChange);
     window.addEventListener("storage", onAuthStateChange);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       window.removeEventListener(CODELENS_AUTH_CHANGE_EVENT, onAuthStateChange);
       window.removeEventListener("storage", onAuthStateChange);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, []);
 
@@ -68,7 +94,11 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
     }
   }, [state, mode, router]);
 
-  if (state === "resolving" || (mode === "protected" && (state === "unauthed"))) {
+  if (mode === "protected" && state === "resolving") {
+    return <>{children}</>;
+  }
+
+  if (state === "resolving" || (mode === "protected" && state === "unauthed")) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6">
         <p

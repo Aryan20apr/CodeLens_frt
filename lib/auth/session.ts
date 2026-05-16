@@ -1,4 +1,5 @@
 import type { AuthSession, AuthUser, LoginResponse, RegisterResponse } from "@/lib/auth/types";
+import { setAuthResolutionState } from "@/lib/auth/auth-resolution";
 
 const STORAGE_KEY = "codelens_auth";
 const AUTH_CHANGED = "codelens-auth-changed";
@@ -25,6 +26,8 @@ function toSession(
 function persist(res: AuthSession): void {
   assertClient();
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(res));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(res));
+  setAuthResolutionState("authed");
   emitAuthChanged();
 }
 
@@ -78,6 +81,7 @@ export function clearAuthSession(): void {
   assertClient();
   sessionStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(STORAGE_KEY);
+  setAuthResolutionState("unauthed");
   emitAuthChanged();
 }
 
