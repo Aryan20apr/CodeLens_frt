@@ -6,6 +6,16 @@ export interface AuthUser {
   role: string;
 }
 
+/** GET /api/v1/users/me */
+export interface CurrentUserResponse {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl: string;
+  role: string;
+  createdAt: string;
+}
+
 export interface RegisterResponse {
   accessToken: string;
   user: AuthUser;

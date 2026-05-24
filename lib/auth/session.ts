@@ -67,6 +67,12 @@ export function setAuthFromOAuthAccessToken(accessToken: string): void {
   persist(next);
 }
 
+export function setAuthUser(user: AuthUser): void {
+  const previous = getAuthSession();
+  if (!previous?.accessToken) return;
+  persist({ ...previous, user });
+}
+
 export function getAuthSession(): AuthSession | null {
   const raw = readRawSession();
   if (!raw) return null;
