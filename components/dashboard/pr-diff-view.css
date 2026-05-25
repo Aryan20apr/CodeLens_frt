@@ -1,0 +1,27 @@
+.pr-diff-root {
+  --diff-background-color: var(--surface-lowest);
+  --diff-text-color: var(--on-surface);
+  --diff-font-family: var(--font-geist-mono), Consolas, Courier, monospace;
+  --diff-selection-background-color: rgba(160, 162, 255, 0.45);
+  --diff-gutter-insert-background-color: rgba(74, 222, 128, 0.38);
+  --diff-gutter-insert-text-color: #bbf7d0;
+  --diff-gutter-delete-background-color: rgba(248, 113, 113, 0.42);
+  --diff-gutter-delete-text-color: #fecaca;
+  --diff-gutter-selected-background-color: rgba(192, 193, 255, 0.35);
+  --diff-code-insert-background-color: rgba(74, 222, 128, 0.28);
+  --diff-code-insert-text-color: #ecfdf5;
+  --diff-code-delete-background-color: rgba(248, 113, 113, 0.3);
+  --diff-code-delete-text-color: #fef2f2;
+  --diff-code-insert-edit-background-color: rgba(52, 211, 153, 0.55);
+  --diff-code-delete-edit-background-color: rgba(251, 113, 133, 0.55);
+  --diff-code-selected-background-color: rgba(192, 193, 255, 0.22);
+  --diff-omit-gutter-line-color: var(--primary);
+}
+
+.pr-diff-root .diff {
+  font-size: 12px;
+}
+
+.pr-diff-root .diff-gutter {
+  color: var(--on-surface-variant);
+}
