@@ -7,12 +7,16 @@ interface GithubRepositoriesSectionProps {
   data: RepositoriesResponse;
   isRefreshing: boolean;
   onRefresh: () => void;
+  selectedRepoId: string | null;
+  onSelectRepo: (repoId: string) => void;
 }
 
 export function GithubRepositoriesSection({
   data,
   isRefreshing,
   onRefresh,
+  selectedRepoId,
+  onSelectRepo,
 }: GithubRepositoriesSectionProps) {
   const { installations, repositories, installationCount } = data;
 
@@ -32,6 +36,7 @@ export function GithubRepositoriesSection({
           >
             {installationCount} installation{installationCount === 1 ? "" : "s"} ·{" "}
             {repositories.length} repositor{repositories.length === 1 ? "y" : "ies"}
+            {repositories.length > 0 && " · Click a row to view pull requests"}
           </p>
         </div>
         <button
@@ -102,10 +107,25 @@ export function GithubRepositoriesSection({
                 </tr>
               </thead>
               <tbody>
-                {repositories.map((repo) => (
+                {repositories.map((repo) => {
+                  const isSelected = selectedRepoId === repo.repoId;
+                  return (
                   <tr
                     key={repo.repoId}
-                    style={{ borderBottom: "1px solid rgba(70,69,84,0.08)" }}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onSelectRepo(repo.repoId)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelectRepo(repo.repoId);
+                      }
+                    }}
+                    className="cursor-pointer transition-colors"
+                    style={{
+                      borderBottom: "1px solid rgba(70,69,84,0.08)",
+                      background: isSelected ? "var(--surface-high)" : "transparent",
+                    }}
                   >
                     <td className="px-6 py-3.5">
                       <span
@@ -148,7 +168,8 @@ export function GithubRepositoriesSection({
                       </span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
