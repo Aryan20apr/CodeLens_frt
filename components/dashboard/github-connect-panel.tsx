@@ -1,16 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, ExternalLink, GitBranch, Loader2 } from "lucide-react";
+import { GithubPullRequestsSection } from "@/components/dashboard/github-pull-requests-section";
 import { GithubRepositoriesSection } from "@/components/dashboard/github-repositories-section";
 import { getAuthSession } from "@/lib/auth/session";
+import { getPullRequests } from "@/lib/github/get-pull-requests";
 import { getRepositories } from "@/lib/github/get-repositories";
+import { githubPagePath } from "@/lib/github/github-routes";
 import {
   GithubInstallApiError,
   startGithubAppInstall,
 } from "@/lib/github/github-install";
-import type { RepositoriesResponse } from "@/lib/github/types";
+import type {
+  GithubPullRequest,
+  GithubRepository,
+  PullRequestState,
+  RepositoriesResponse,
+} from "@/lib/github/types";
 
 const CALLBACK_ERROR_MESSAGES: Record<string, string> = {
   missing_installation: "GitHub did not return an installation id. Try connecting again.",
@@ -25,18 +33,57 @@ function getCallbackErrorMessage(code: string | null): string | null {
 }
 
 export function GithubConnectPanel() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const repoIdFromQuery = searchParams.get("repo");
   const [error, setError] = useState<string | null>(null);
   const [reposError, setReposError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoadingRepos, setIsLoadingRepos] = useState(true);
   const [isRefreshingRepos, setIsRefreshingRepos] = useState(false);
   const [reposData, setReposData] = useState<RepositoriesResponse | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<GithubRepository | null>(null);
+  const [prState, setPrState] = useState<PullRequestState>("open");
+  const prStateRef = useRef<PullRequestState>(prState);
+  prStateRef.current = prState;
+  const [pullRequests, setPullRequests] = useState<GithubPullRequest[]>([]);
+  const [prError, setPrError] = useState<string | null>(null);
+  const [isLoadingPrs, setIsLoadingPrs] = useState(false);
 
   const installed = searchParams.get("installed") === "1";
   const callbackError = useMemo(
     () => getCallbackErrorMessage(searchParams.get("error")),
     [searchParams],
+  );
+
+  const loadPullRequests = useCallback(
+    async (repo: GithubRepository, state: PullRequestState) => {
+      const session = getAuthSession();
+      if (!session?.accessToken) {
+        setPullRequests([]);
+        setPrError("Your session is missing an access token. Please sign in again.");
+        setIsLoadingPrs(false);
+        return;
+      }
+
+      setIsLoadingPrs(true);
+      setPrError(null);
+
+      try {
+        const data = await getPullRequests(session.accessToken, repo.repoId, { state });
+        setPullRequests(data);
+      } catch (err) {
+        setPullRequests([]);
+        if (err instanceof GithubInstallApiError) {
+          setPrError(err.message);
+        } else {
+          setPrError("Could not load pull requests.");
+        }
+      } finally {
+        setIsLoadingPrs(false);
+      }
+    },
+    [],
   );
 
   const loadRepositories = useCallback(async (mode: "initial" | "refresh" = "initial") => {
@@ -59,6 +106,18 @@ export function GithubConnectPanel() {
     try {
       const data = await getRepositories(session.accessToken);
       setReposData(data);
+      setSelectedRepo((current) => {
+        if (!current) return null;
+        const next = data.repositories.find((repo) => repo.repoId === current.repoId) ?? null;
+        if (next) {
+          void loadPullRequests(next, prStateRef.current);
+        } else {
+          setPullRequests([]);
+          setPrError(null);
+          setIsLoadingPrs(false);
+        }
+        return next;
+      });
     } catch (err) {
       setReposData(null);
       if (err instanceof GithubInstallApiError) {
@@ -70,11 +129,23 @@ export function GithubConnectPanel() {
       setIsLoadingRepos(false);
       setIsRefreshingRepos(false);
     }
-  }, []);
+  }, [loadPullRequests]);
 
   useEffect(() => {
     void loadRepositories();
   }, [loadRepositories, installed]);
+
+  useEffect(() => {
+    if (!reposData?.repositories.length || !repoIdFromQuery) return;
+    const repo =
+      reposData.repositories.find((item) => item.repoId === repoIdFromQuery) ?? null;
+    if (!repo) return;
+    setSelectedRepo((current) => {
+      if (current?.repoId === repo.repoId) return current;
+      void loadPullRequests(repo, prStateRef.current);
+      return repo;
+    });
+  }, [reposData, repoIdFromQuery, loadPullRequests]);
 
   const isConnected = !isLoadingRepos && reposData?.connected === true;
 
@@ -208,13 +279,50 @@ export function GithubConnectPanel() {
       )}
 
       {!isLoadingRepos && reposData?.connected && (
-        <GithubRepositoriesSection
-          data={reposData}
-          isRefreshing={isRefreshingRepos}
-          onRefresh={() => {
-            void loadRepositories("refresh");
-          }}
-        />
+        <>
+          <GithubRepositoriesSection
+            data={reposData}
+            isRefreshing={isRefreshingRepos}
+            onRefresh={() => {
+              void loadRepositories("refresh");
+            }}
+            selectedRepoId={selectedRepo?.repoId ?? null}
+            onSelectRepo={(repoId) => {
+              const repo = reposData.repositories.find((item) => item.repoId === repoId) ?? null;
+              setSelectedRepo(repo);
+              setPrState("open");
+              setPullRequests([]);
+              router.replace(githubPagePath(repoId), { scroll: false });
+              if (repo) {
+                void loadPullRequests(repo, "open");
+              } else {
+                setPrError(null);
+                setIsLoadingPrs(false);
+              }
+            }}
+          />
+          {selectedRepo && (
+            <GithubPullRequestsSection
+              repo={selectedRepo}
+              state={prState}
+              pullRequests={pullRequests}
+              isLoading={isLoadingPrs}
+              error={prError}
+              onBack={() => {
+                setSelectedRepo(null);
+                setPullRequests([]);
+                setPrError(null);
+                setIsLoadingPrs(false);
+                setPrState("open");
+                router.replace(githubPagePath(), { scroll: false });
+              }}
+              onStateChange={(nextState) => {
+                setPrState(nextState);
+                void loadPullRequests(selectedRepo, nextState);
+              }}
+            />
+          )}
+        </>
       )}
 
       {installed && (

@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { authFetch } from "@/lib/auth/auth-fetch";
 import type {
   CodeReviewJobCreatedResponse,
   CodeReviewJobDetails,
@@ -28,16 +29,18 @@ export async function submitCodeReviewJob(
   body: CodeReviewJobRequest,
   accessToken: string,
 ): Promise<CodeReviewJobCreatedResponse> {
-  const res = await fetch(`${apiBaseUrl}/api/v1/codereview/job`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
+  const res = await authFetch(
+    `${apiBaseUrl}/api/v1/codereview/job`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-    credentials: "include",
-  });
+    { accessToken },
+  );
 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -51,14 +54,14 @@ export async function getCodeReviewJobDetails(
   jobId: string,
   accessToken: string,
 ): Promise<CodeReviewJobDetails> {
-  const res = await fetch(`${apiBaseUrl}/api/v1/codereview/${jobId}`, {
-    method: "GET",
-    headers: {
-      Accept: "*/*",
-      Authorization: `Bearer ${accessToken}`,
+  const res = await authFetch(
+    `${apiBaseUrl}/api/v1/codereview/${jobId}`,
+    {
+      method: "GET",
+      headers: { Accept: "*/*" },
     },
-    credentials: "include",
-  });
+    { accessToken },
+  );
 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {

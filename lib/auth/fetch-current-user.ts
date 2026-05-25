@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { authFetch } from "@/lib/auth/auth-fetch";
 import type { ApiErrorBody, AuthUser, CurrentUserResponse } from "@/lib/auth/types";
 
 export class CurrentUserApiError extends Error {
@@ -29,14 +30,14 @@ export function mapCurrentUserToAuthUser(data: CurrentUserResponse): AuthUser {
 }
 
 export async function fetchCurrentUser(accessToken: string): Promise<CurrentUserResponse> {
-  const res = await fetch(`${apiBaseUrl}/api/v1/users/me`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${accessToken}`,
+  const res = await authFetch(
+    `${apiBaseUrl}/api/v1/users/me`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
     },
-    credentials: "include",
-  });
+    { accessToken },
+  );
 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
