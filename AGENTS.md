@@ -18,7 +18,7 @@ This repository is a Next.js 16 App Router frontend for **CodeLens**. The curren
 
 - Root layout and fonts live in `app/layout.tsx`.
 - Auth pages use `RouteGuard` to keep signed-in users out of guest-only routes and to redirect unauthenticated users away from protected routes.
-- Session state is browser-managed in `lib/auth/session.ts` and refreshed from the backend via `lib/auth/refresh-session.ts`.
+- Session state is browser-managed in `lib/auth/session.ts` and refreshed from the backend via `lib/auth/refresh-session.ts`. Authenticated API calls should use `lib/auth/auth-fetch.ts` so a 401 triggers one refresh-and-retry cycle.
 - Auth requests use `NEXT_PUBLIC_API_BASE_URL` as the backend origin. It must point to the API host, not the Next.js app.
 - Dashboard content is currently mocked/hardcoded, so treat it as UI scaffolding unless the user asks to connect real data.
 

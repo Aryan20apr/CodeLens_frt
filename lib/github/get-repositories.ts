@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { authFetch } from "@/lib/auth/auth-fetch";
 import { GithubInstallApiError } from "@/lib/github/github-install";
 import type {
   GithubInstallation,
@@ -17,26 +18,35 @@ function getErrorMessage(data: unknown): string {
 function parseInstallation(value: unknown): GithubInstallation | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
+  const installationId = normalizeId(row.installationId);
   if (
-    typeof row.installationId !== "string" ||
+    installationId == null ||
     typeof row.accountLogin !== "string" ||
     typeof row.accountType !== "string"
   ) {
     return null;
   }
   return {
-    installationId: row.installationId,
+    installationId,
     accountLogin: row.accountLogin,
     accountType: row.accountType,
   };
 }
 
+function normalizeId(value: unknown): string | null {
+  if (typeof value === "string" && value.trim().length > 0) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 function parseRepository(value: unknown): GithubRepository | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
+  const installationId = normalizeId(row.installationId);
+  const repoId = normalizeId(row.repoId);
   if (
-    typeof row.installationId !== "string" ||
-    typeof row.repoId !== "string" ||
+    installationId == null ||
+    repoId == null ||
     typeof row.fullName !== "string" ||
     typeof row.private !== "boolean" ||
     typeof row.accountLogin !== "string"
@@ -44,8 +54,8 @@ function parseRepository(value: unknown): GithubRepository | null {
     return null;
   }
   return {
-    installationId: row.installationId,
-    repoId: row.repoId,
+    installationId,
+    repoId,
     fullName: row.fullName,
     private: row.private,
     accountLogin: row.accountLogin,
@@ -75,14 +85,14 @@ function parseRepositoriesResponse(data: unknown): RepositoriesResponse {
 }
 
 export async function getRepositories(accessToken: string): Promise<RepositoriesResponse> {
-  const res = await fetch(`${apiBaseUrl}/api/v1/repositories`, {
-    method: "GET",
-    headers: {
-      Accept: "*/*",
-      Authorization: `Bearer ${accessToken}`,
+  const res = await authFetch(
+    `${apiBaseUrl}/api/v1/repositories`,
+    {
+      method: "GET",
+      headers: { Accept: "*/*" },
     },
-    credentials: "include",
-  });
+    { accessToken },
+  );
 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {

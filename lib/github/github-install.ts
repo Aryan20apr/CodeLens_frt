@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { authFetch } from "@/lib/auth/auth-fetch";
 import { createGithubInstallState } from "@/lib/github/install-state";
 
 export interface GithubInstallResponse {
@@ -52,14 +53,14 @@ export function appendStateToInstallUrl(installUrl: string, state: string): stri
 }
 
 export async function getGithubInstallUrl(accessToken: string): Promise<GithubInstallResponse> {
-  const res = await fetch(`${apiBaseUrl}/api/v1/auth/github/install`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${accessToken}`,
+  const res = await authFetch(
+    `${apiBaseUrl}/api/v1/auth/github/install`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
     },
-    credentials: "include",
-  });
+    { accessToken },
+  );
 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
