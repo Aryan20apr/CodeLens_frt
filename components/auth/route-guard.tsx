@@ -17,15 +17,10 @@ function isSignedIn() {
   return (getAuthSession()?.accessToken ?? "") !== "";
 }
 
-function getInitialGuardState(): GuardState {
-  const cached = getAuthResolutionState();
-  if (cached !== "unknown") return cached;
-  return isSignedIn() ? "authed" : "resolving";
-}
-
 export function RouteGuard({ mode, children }: RouteGuardProps) {
   const router = useRouter();
-  const [state, setState] = useState<GuardState>(() => getInitialGuardState());
+  // Always "resolving" on first paint so SSR and client markup match; auth is resolved in useLayoutEffect.
+  const [state, setState] = useState<GuardState>("resolving");
 
   // Initial resolve: in-memory / session access token, else cookie-based refresh.
   useLayoutEffect(() => {
