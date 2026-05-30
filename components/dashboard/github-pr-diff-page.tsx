@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, ExternalLink, Loader2, Play } from "lucide-react";
 import {
   GithubPrFileSidebar,
   pullRequestFileKey,
@@ -20,6 +20,10 @@ import { getPullRequestFiles } from "@/lib/github/get-pull-request-files";
 import { githubPagePath } from "@/lib/github/github-routes";
 import { GithubInstallApiError } from "@/lib/github/github-install";
 import type { GithubPullRequestDetail, GithubPullRequestFile } from "@/lib/github/types";
+import {
+  ReviewRunApiError,
+  triggerPullRequestReview,
+} from "@/lib/review-runs/trigger-pull-request-review";
 
 interface GithubPrDiffPageProps {
   repoId: string;
@@ -41,6 +45,11 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
   const [repoFullName, setRepoFullName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTriggeringReview, setIsTriggeringReview] = useState(false);
+  const [reviewFeedback, setReviewFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const fileFromQuery = searchParams.get("file");
   const diffView = parseDiffViewType(searchParams.get("view"));
@@ -128,6 +137,43 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
     });
   }
 
+  function handleTriggerReview() {
+    if (pullNumber == null || isTriggeringReview) return;
+
+    const session = getAuthSession();
+    if (!session?.accessToken) {
+      setReviewFeedback({
+        type: "error",
+        message: "Your session is missing an access token. Please sign in again.",
+      });
+      return;
+    }
+
+    setReviewFeedback(null);
+    setIsTriggeringReview(true);
+
+    void (async () => {
+      try {
+        await triggerPullRequestReview(session.accessToken, repoId, pullNumber);
+        setReviewFeedback({
+          type: "success",
+          message: "Review started. Feedback will appear on the pull request when it finishes.",
+        });
+      } catch (err) {
+        if (err instanceof ReviewRunApiError) {
+          setReviewFeedback({ type: "error", message: err.message });
+        } else {
+          setReviewFeedback({
+            type: "error",
+            message: "Could not start pull request review.",
+          });
+        }
+      } finally {
+        setIsTriggeringReview(false);
+      }
+    })();
+  }
+
   const backHref = githubPagePath(repoId);
 
   return (
@@ -180,6 +226,22 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
           )}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-3">
+          {detail && pullNumber != null && !isLoading && (
+            <button
+              type="button"
+              onClick={handleTriggerReview}
+              disabled={isTriggeringReview}
+              className="btn-primary inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:pointer-events-none disabled:opacity-50"
+              style={{ fontFamily: "var(--font-space-grotesk)" }}
+            >
+              {isTriggeringReview ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Play className="h-4 w-4" fill="currentColor" aria-hidden />
+              )}
+              {isTriggeringReview ? "Starting review…" : "Run review"}
+            </button>
+          )}
           {!isLoading && files.length > 0 && (
             <DiffViewToggle value={diffView} onChange={handleDiffViewChange} />
           )}
@@ -211,6 +273,40 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
         >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--error)" }} aria-hidden />
           <span>{error}</span>
+        </div>
+      )}
+
+      {reviewFeedback && (
+        <div
+          role={reviewFeedback.type === "error" ? "alert" : "status"}
+          className="mx-8 mt-4 flex items-start gap-3 rounded-2xl p-4 text-sm"
+          style={{
+            background:
+              reviewFeedback.type === "error"
+                ? "rgba(255,180,171,0.1)"
+                : "rgba(192,193,255,0.1)",
+            border:
+              reviewFeedback.type === "error"
+                ? "1px solid rgba(255,180,171,0.3)"
+                : "1px solid rgba(192,193,255,0.3)",
+            color: "var(--on-surface)",
+            fontFamily: "var(--font-space-grotesk)",
+          }}
+        >
+          {reviewFeedback.type === "error" ? (
+            <AlertCircle
+              className="mt-0.5 h-4 w-4 shrink-0"
+              style={{ color: "var(--error)" }}
+              aria-hidden
+            />
+          ) : (
+            <CheckCircle2
+              className="mt-0.5 h-4 w-4 shrink-0"
+              style={{ color: "var(--primary)" }}
+              aria-hidden
+            />
+          )}
+          <span>{reviewFeedback.message}</span>
         </div>
       )}
 
