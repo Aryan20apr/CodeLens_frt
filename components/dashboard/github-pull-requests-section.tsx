@@ -163,7 +163,7 @@ export function GithubPullRequestsSection({
                 {pullRequests.map((pr) => (
                     <tr
                     key={pr.number}
-                    role="link"
+                    role="button"
                     tabIndex={0}
                     onClick={() => router.push(githubPullDiffPath(repo.repoId, pr.number))}
                     onKeyDown={(e) => {
