@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ArrowLeft, CheckCircle2, ExternalLink, Loader2, Play } from "lucide-react";
@@ -20,10 +20,17 @@ import { getPullRequestFiles } from "@/lib/github/get-pull-request-files";
 import { githubPagePath } from "@/lib/github/github-routes";
 import { GithubInstallApiError } from "@/lib/github/github-install";
 import type { GithubPullRequestDetail, GithubPullRequestFile } from "@/lib/github/types";
+import { ReviewRunWorkflow } from "@/components/dashboard/review-run-workflow";
+import { consumeReviewRunStream } from "@/lib/review-runs/consume-review-run-stream";
+import { isAbortError } from "@/lib/review-runs/is-abort-error";
+import { ReviewRunSseParser } from "@/lib/review-runs/parse-review-run-sse";
+import { ReviewRunApiError } from "@/lib/review-runs/review-run-api-error";
+import { applyReviewRunStreamEvents } from "@/lib/review-runs/review-run-workflow-state";
 import {
-  ReviewRunApiError,
-  triggerPullRequestReview,
-} from "@/lib/review-runs/trigger-pull-request-review";
+  INITIAL_REVIEW_RUN_WORKFLOW_STATE,
+  type ReviewRunWorkflowState,
+} from "@/lib/review-runs/review-run-stream-types";
+import { triggerPullRequestReview } from "@/lib/review-runs/trigger-pull-request-review";
 
 interface GithubPrDiffPageProps {
   repoId: string;
@@ -50,6 +57,13 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
     type: "success" | "error";
     message: string;
   } | null>(null);
+  const [workflowState, setWorkflowState] = useState<ReviewRunWorkflowState>(
+    INITIAL_REVIEW_RUN_WORKFLOW_STATE,
+  );
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const sseParserRef = useRef(new ReviewRunSseParser());
 
   const fileFromQuery = searchParams.get("file");
   const diffView = parseDiffViewType(searchParams.get("view"));
@@ -98,6 +112,52 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
   useEffect(() => {
     void loadDiff();
   }, [loadDiff]);
+
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+    };
+  }, []);
+
+  const startReviewStream = useCallback((accessToken: string, reviewRunId: string) => {
+    streamAbortRef.current?.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
+    sseParserRef.current.reset();
+    setStreamError(null);
+    setWorkflowState(INITIAL_REVIEW_RUN_WORKFLOW_STATE);
+    setIsStreaming(true);
+
+    void (async () => {
+      try {
+        await consumeReviewRunStream({
+          accessToken,
+          reviewRunId,
+          signal: controller.signal,
+          onChunk: (chunk) => {
+            const events = sseParserRef.current.push(chunk);
+            if (events.length === 0) return;
+            setWorkflowState((prev) => applyReviewRunStreamEvents(prev, events));
+          },
+        });
+      } catch (err) {
+        if (controller.signal.aborted || isAbortError(err)) return;
+        const message =
+          err instanceof ReviewRunApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Review stream disconnected unexpectedly.";
+        setStreamError(message);
+      } finally {
+        if (streamAbortRef.current === controller) {
+          setIsStreaming(false);
+          streamAbortRef.current = null;
+        }
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (files.length === 0) return;
@@ -154,11 +214,13 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
 
     void (async () => {
       try {
-        await triggerPullRequestReview(session.accessToken, repoId, pullNumber);
-        setReviewFeedback({
-          type: "success",
-          message: "Review started. Feedback will appear on the pull request when it finishes.",
-        });
+        const reviewRunId = await triggerPullRequestReview(
+          session.accessToken,
+          repoId,
+          pullNumber,
+        );
+        setReviewFeedback(null);
+        startReviewStream(session.accessToken, reviewRunId);
       } catch (err) {
         if (err instanceof ReviewRunApiError) {
           setReviewFeedback({ type: "error", message: err.message });
@@ -275,6 +337,12 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
           <span>{error}</span>
         </div>
       )}
+
+      <ReviewRunWorkflow
+        state={workflowState}
+        isStreaming={isStreaming}
+        streamError={streamError}
+      />
 
       {reviewFeedback && (
         <div
