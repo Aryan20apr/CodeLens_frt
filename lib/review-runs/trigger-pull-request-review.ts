@@ -1,40 +1,27 @@
 import { apiBaseUrl } from "@/lib/api-config";
 import { authFetch } from "@/lib/auth/auth-fetch";
 import { normalizeRepoId } from "@/lib/github/repo-id";
+import { getReviewRunErrorMessage, ReviewRunApiError } from "@/lib/review-runs/review-run-api-error";
 
-export class ReviewRunApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly body: unknown,
-  ) {
-    super(message);
-    this.name = "ReviewRunApiError";
-  }
-}
+export { ReviewRunApiError } from "@/lib/review-runs/review-run-api-error";
 
-function getErrorMessage(data: unknown): string {
-  if (data && typeof data === "object" && "message" in data) {
-    const message = (data as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim().length > 0) return message;
-  }
-  return "Could not start pull request review";
-}
-
-function isReviewRunCreated(data: unknown): boolean {
-  return (
-    !!data &&
+function parseReviewRunId(data: unknown): string | null {
+  if (
+    data &&
     typeof data === "object" &&
-    typeof (data as { reviewRunId?: unknown }).reviewRunId === "string" &&
-    (data as { reviewRunId: string }).reviewRunId.trim().length > 0
-  );
+    typeof (data as { reviewRunId?: unknown }).reviewRunId === "string"
+  ) {
+    const id = (data as { reviewRunId: string }).reviewRunId.trim();
+    return id.length > 0 ? id : null;
+  }
+  return null;
 }
 
 export async function triggerPullRequestReview(
   accessToken: string,
   repoId: string | number,
   pullNumber: number,
-): Promise<void> {
+): Promise<string> {
   const repoIdParam = normalizeRepoId(repoId);
 
   const res = await authFetch(
@@ -48,10 +35,17 @@ export async function triggerPullRequestReview(
 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ReviewRunApiError(getErrorMessage(data), res.status, data);
+    throw new ReviewRunApiError(
+      getReviewRunErrorMessage(data, "Could not start pull request review"),
+      res.status,
+      data,
+    );
   }
 
-  if (!isReviewRunCreated(data)) {
+  const reviewRunId = parseReviewRunId(data);
+  if (!reviewRunId) {
     throw new ReviewRunApiError("Review run response was invalid", res.status, data);
   }
+
+  return reviewRunId;
 }
