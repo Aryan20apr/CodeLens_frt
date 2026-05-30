@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Decoration, Diff, Hunk, parseDiff } from "react-diff-view";
+import { Diff, Hunk, parseDiff } from "react-diff-view";
 import type { FileData, ViewType } from "react-diff-view";
 import type { DiffViewType } from "@/components/dashboard/diff-view-toggle";
 import { normalizeGithubPatch } from "@/lib/github/normalize-github-patch";
@@ -92,25 +92,14 @@ export function PrDiffFile({ file, viewType = "unified", showHeader = false }: P
       ) : (
         <div className="pr-diff-root overflow-x-auto">
           <Diff viewType={diffViewType} diffType={parsed.type} hunks={parsed.hunks}>
-            {(hunks) => (
-              <>
-                <Decoration>
-                  <span
-                    className="block px-4 py-2 text-xs"
-                    style={{
-                      color: "var(--on-surface-variant)",
-                      fontFamily: "var(--font-space-grotesk)",
-                      background: "var(--surface-container)",
-                    }}
-                  >
-                    {parsed.newPath || parsed.oldPath}
-                  </span>
-                </Decoration>
-                {hunks.map((hunk) => (
-                  <Hunk key={hunk.content} hunk={hunk} />
-                ))}
-              </>
-            )}
+            {(hunks) =>
+              hunks.map((hunk, index) => (
+                <Hunk
+                  key={`${hunk.oldStart}-${hunk.newStart}-${index}-${hunk.content}`}
+                  hunk={hunk}
+                />
+              ))
+            }
           </Diff>
         </div>
       )}

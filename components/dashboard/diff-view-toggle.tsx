@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { Columns2, Rows3 } from "lucide-react";
+import "./pr-diff-view.css";
 
 export type DiffViewType = "unified" | "split";
 
@@ -42,10 +43,6 @@ export function DiffViewToggle({ value, onChange }: DiffViewToggleProps) {
           </Tabs.Trigger>
         ))}
       </Tabs.List>
-      <style>{`
-        [data-diff-view] { color: var(--on-surface-variant); background: transparent; }
-        [data-state="active"][data-diff-view] { color: var(--primary); background: var(--surface-container); }
-      `}</style>
     </Tabs.Root>
   );
 }
