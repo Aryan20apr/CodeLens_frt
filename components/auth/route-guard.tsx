@@ -25,12 +25,17 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
   // Initial resolve: in-memory / session access token, else cookie-based refresh.
   useLayoutEffect(() => {
     const cached = getAuthResolutionState();
-    if (cached !== "unknown") {
-      setState(cached);
+    const signedIn = isSignedIn();
+    if (cached === "authed" && signedIn) {
+      setState("authed");
+      return;
+    }
+    if (cached === "unauthed" && !signedIn) {
+      setState("unauthed");
       return;
     }
 
-    if (isSignedIn()) {
+    if (signedIn) {
       setAuthResolutionState("authed");
       setState("authed");
       return;
@@ -63,10 +68,10 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
       setState(next);
     }
     function onPageShow() {
-      if (isSignedIn()) {
-        setAuthResolutionState("authed");
-        setState("authed");
-      }
+      const authed = isSignedIn();
+      const next: GuardState = authed ? "authed" : "unauthed";
+      setAuthResolutionState(next);
+      setState(next);
     }
     window.addEventListener(CODELENS_AUTH_CHANGE_EVENT, onAuthStateChange);
     window.addEventListener("storage", onAuthStateChange);
@@ -88,10 +93,6 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
       router.replace("/dashboard");
     }
   }, [state, mode, router]);
-
-  if (mode === "protected" && state === "resolving") {
-    return <>{children}</>;
-  }
 
   if (state === "resolving" || (mode === "protected" && state === "unauthed")) {
     return (
