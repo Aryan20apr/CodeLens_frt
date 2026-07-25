@@ -25,3 +25,13 @@
 .pr-diff-root .diff-gutter {
   color: var(--on-surface-variant);
 }
+
+[data-diff-view] {
+  color: var(--on-surface-variant);
+  background: transparent;
+}
+
+[data-state="active"][data-diff-view] {
+  color: var(--primary);
+  background: var(--surface-container);
+}

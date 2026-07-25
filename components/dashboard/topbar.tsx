@@ -1,8 +1,22 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
 import { Plus } from "lucide-react";
 
-export function Topbar() {
+function getGreeting(): string {
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function subscribeGreeting(onStoreChange: () => void): () => void {
+  const interval = window.setInterval(onStoreChange, 60_000);
+  return () => window.clearInterval(interval);
+}
+
+export function Topbar() {
+  const greeting = useSyncExternalStore(subscribeGreeting, getGreeting, () => "Good morning");
 
   return (
     <header
@@ -13,6 +27,7 @@ export function Topbar() {
         <h1
           className="text-lg font-bold tracking-tight"
           style={{ fontFamily: "var(--font-geist-sans)", color: "var(--on-surface)" }}
+          suppressHydrationWarning
         >
           {greeting}, Aryan
         </h1>
