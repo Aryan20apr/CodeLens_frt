@@ -6,11 +6,26 @@ export type LlmProvider =
   | "ANTHROPIC"
   | (string & {});
 
+export interface ApiResponse<T> {
+  success: boolean;
+  message?: string;
+  data: T;
+}
+
+export interface ApiErrorResponse {
+  success: boolean;
+  message: string;
+  data?: unknown;
+  error?: string;
+  statusCode?: number;
+}
+
 export interface LlmProviderKey {
   provider: LlmProvider;
   maskedKey: string;
   updatedAt: string;
-  nvidiaBaseUrl: string | null;
+  baseUrl?: string | null;
+  nvidiaBaseUrl?: string | null;
 }
 
 export interface ActiveProvider {

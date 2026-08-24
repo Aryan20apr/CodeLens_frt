@@ -23,30 +23,40 @@ function extractMessage(data: unknown): string {
   if (data && typeof data === "object") {
     const obj = data as Record<string, unknown>;
 
-    // Handle Zod validation error details like { details: { apiKey: ["..."] } }
-    if (obj.details && typeof obj.details === "object") {
-      const details = obj.details as Record<string, unknown>;
-      const detailMessages: string[] = [];
-      for (const [key, val] of Object.entries(details)) {
+    // Handle nested validation details in `data` or `details` (e.g. { data: { apiKey: ["..."] } })
+    const validationSource =
+      obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)
+        ? (obj.data as Record<string, unknown>)
+        : obj.details && typeof obj.details === "object" && !Array.isArray(obj.details)
+          ? (obj.details as Record<string, unknown>)
+          : null;
+
+    const detailMessages: string[] = [];
+    if (validationSource) {
+      for (const [key, val] of Object.entries(validationSource)) {
         if (Array.isArray(val) && val.length > 0) {
           detailMessages.push(`${key}: ${val.join(", ")}`);
-        } else if (typeof val === "string") {
-          detailMessages.push(`${key}: ${val}`);
+        } else if (typeof val === "string" && val.trim().length > 0) {
+          detailMessages.push(`${key}: ${val.trim()}`);
         }
-      }
-      if (detailMessages.length > 0) {
-        return detailMessages.join("; ");
       }
     }
 
-    if (Array.isArray(obj.message)) {
-      return obj.message.join(", ");
+    const mainMessage =
+      typeof obj.message === "string" && obj.message.trim().length > 0
+        ? obj.message.trim()
+        : Array.isArray(obj.message)
+          ? obj.message.join(", ")
+          : typeof obj.error === "string" && obj.error.trim().length > 0
+            ? obj.error.trim()
+            : null;
+
+    if (detailMessages.length > 0) {
+      return mainMessage ? `${mainMessage}: ${detailMessages.join("; ")}` : detailMessages.join("; ");
     }
-    if (typeof obj.message === "string" && obj.message.trim().length > 0) {
-      return obj.message.trim();
-    }
-    if (typeof obj.error === "string" && obj.error.trim().length > 0) {
-      return obj.error.trim();
+
+    if (mainMessage) {
+      return mainMessage;
     }
   }
   return "LLM provider API request failed";
@@ -70,21 +80,36 @@ async function llmFetch(
     accessToken ? { accessToken } : {},
   );
 
-  const data: unknown = await res.json().catch(() => ({}));
+  const json: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new LlmProviderApiError(extractMessage(data), res.status, data);
+    throw new LlmProviderApiError(extractMessage(json), res.status, json);
   }
-  return data;
+
+  // Automatically unwrap standardized API response envelope: { success: boolean, data: T, message?: string }
+  if (json && typeof json === "object" && "success" in json) {
+    const envelope = json as { success?: boolean; data?: unknown };
+    if ("data" in envelope && envelope.data !== undefined) {
+      return envelope.data;
+    }
+  }
+
+  return json;
 }
 
 export async function fetchProviderKeys(
   accessToken?: string,
 ): Promise<LlmProviderKey[]> {
-  return llmFetch(
+  const data = (await llmFetch(
     "/api/v1/llm-provider/keys",
     { method: "GET" },
     accessToken,
-  ) as Promise<LlmProviderKey[]>;
+  )) as LlmProviderKey[];
+
+  const list = Array.isArray(data) ? data : [];
+  return list.map((item) => ({
+    ...item,
+    baseUrl: item.baseUrl ?? item.nvidiaBaseUrl ?? null,
+  }));
 }
 
 export async function saveProviderKey(
@@ -110,21 +135,39 @@ export async function fetchProviderModels(
   provider: LlmProvider,
   accessToken?: string,
 ): Promise<ModelsResponse> {
-  return llmFetch(
+  const data = await llmFetch(
     `/api/v1/llm-provider/keys/${provider}/models`,
     { method: "GET" },
     accessToken,
-  ) as Promise<ModelsResponse>;
+  );
+
+  if (Array.isArray(data)) {
+    return { models: data as string[] };
+  }
+  if (
+    data &&
+    typeof data === "object" &&
+    "models" in data &&
+    Array.isArray((data as { models: unknown }).models)
+  ) {
+    return data as ModelsResponse;
+  }
+  return { models: [] };
 }
 
 export async function fetchActiveProvider(
   accessToken?: string,
-): Promise<ActiveProvider> {
-  return llmFetch(
+): Promise<ActiveProvider | null> {
+  const data = await llmFetch(
     "/api/v1/llm-provider/active",
     { method: "GET" },
     accessToken,
-  ) as Promise<ActiveProvider>;
+  );
+
+  if (!data || (typeof data === "object" && Object.keys(data).length === 0)) {
+    return null;
+  }
+  return data as ActiveProvider;
 }
 
 export async function setActiveProvider(

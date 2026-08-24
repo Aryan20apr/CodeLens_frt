@@ -876,7 +876,7 @@ function AddProviderModal({
         provider: effectiveProviderId,
         maskedKey: res.maskedKey,
         updatedAt: new Date().toISOString(),
-        nvidiaBaseUrl: baseUrl.trim() ? baseUrl.trim() : null,
+        baseUrl: baseUrl.trim() ? baseUrl.trim() : null,
       };
 
       onKeySaved(createdKey, res.models);
@@ -1211,7 +1211,7 @@ function ProviderCard({
   const [formOpen, setFormOpen] = useState(false);
   const [showKeyText, setShowKeyText] = useState(false);
   const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState(existingKey.nvidiaBaseUrl ?? "");
+  const [baseUrl, setBaseUrl] = useState(existingKey.baseUrl ?? existingKey.nvidiaBaseUrl ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -1255,7 +1255,7 @@ function ProviderCard({
         provider: meta.id,
         maskedKey: res.maskedKey,
         updatedAt: new Date().toISOString(),
-        nvidiaBaseUrl: baseUrl.trim() ? baseUrl.trim() : null,
+        baseUrl: baseUrl.trim() ? baseUrl.trim() : null,
       };
 
       setModels(res.models);
@@ -1530,13 +1530,13 @@ function ProviderCard({
             </span>
           </div>
 
-          {existingKey.nvidiaBaseUrl && (
+          {(existingKey.baseUrl || existingKey.nvidiaBaseUrl) && (
             <div
               className="flex items-center gap-1 text-[11px] font-mono mt-1 pt-1.5 border-t truncate"
               style={{ borderColor: "rgba(70,69,84,0.2)", color: "var(--on-surface-variant)" }}
             >
               <Server size={11} className="shrink-0" />
-              <span className="truncate">{existingKey.nvidiaBaseUrl}</span>
+              <span className="truncate">{existingKey.baseUrl ?? existingKey.nvidiaBaseUrl}</span>
             </div>
           )}
         </div>
