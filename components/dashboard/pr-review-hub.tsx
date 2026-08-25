@@ -611,6 +611,10 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
                 files={files}
                 isLoadingRun={isLoadingRuns}
                 onSelectFile={handleJumpToFile}
+                onViewAllDiffs={() => setActiveTab("diff")}
+                onTriggerReview={handleTriggerReview}
+                isStreaming={isStreaming || isTriggeringReview}
+                htmlUrl={detail?.htmlUrl}
               />
             </div>
           )}

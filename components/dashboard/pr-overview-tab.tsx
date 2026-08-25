@@ -1,11 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Sparkles,
-  ShieldAlert,
-  Zap,
-  FlaskConical,
   AlertTriangle,
   Lightbulb,
   Bug,
@@ -13,6 +10,15 @@ import {
   GitCommit,
   ArrowRight,
   FileCode2,
+  GitMerge,
+  Search,
+  ExternalLink,
+  Flame,
+  FilePlus2,
+  FileMinus2,
+  FilePenLine,
+  TrendingUp,
+  SlidersHorizontal,
 } from "lucide-react";
 import type { ReviewRun } from "@/lib/review-runs/review-run-types";
 import type { GithubPullRequestFile } from "@/lib/github/types";
@@ -23,6 +29,10 @@ interface PrOverviewTabProps {
   files: GithubPullRequestFile[];
   isLoadingRun: boolean;
   onSelectFile?: (filename: string) => void;
+  onViewAllDiffs?: () => void;
+  onTriggerReview?: () => void;
+  isStreaming?: boolean;
+  htmlUrl?: string;
 }
 
 function formatDuration(createdAt: string, completedAt: string | null): string {
@@ -31,6 +41,25 @@ function formatDuration(createdAt: string, completedAt: string | null): string {
   if (ms < 0) return "—";
   const s = Math.round(ms / 1000);
   return s < 60 ? `${s}s` : `${Math.round(s / 60)}m`;
+}
+
+function getFileExtension(filename: string): string {
+  const parts = filename.split(".");
+  return parts.length > 1 ? parts.pop()?.toUpperCase() ?? "FILE" : "FILE";
+}
+
+function StatusIcon({ status }: { status: GithubPullRequestFile["status"] }) {
+  const props = { size: 14, "aria-hidden": true as const };
+  switch (status) {
+    case "added":
+      return <FilePlus2 {...props} style={{ color: "#4ade80" }} />;
+    case "removed":
+      return <FileMinus2 {...props} style={{ color: "var(--error)" }} />;
+    case "modified":
+      return <FilePenLine {...props} style={{ color: "var(--primary)" }} />;
+    default:
+      return <FileCode2 {...props} style={{ color: "var(--on-surface-variant)" }} />;
+  }
 }
 
 function ScoreGauge({ score }: { score: number }) {
@@ -84,7 +113,12 @@ export function PrOverviewTab({
   files,
   isLoadingRun,
   onSelectFile,
+  onViewAllDiffs,
+  onTriggerReview,
+  isStreaming,
+  htmlUrl,
 }: PrOverviewTabProps) {
+  const [fileSearch, setFileSearch] = useState("");
   const summaryText = latestRun?.summaryText ?? null;
   const duration = latestRun
     ? formatDuration(latestRun.createdAt, latestRun.completedAt)
@@ -115,85 +149,36 @@ export function PrOverviewTab({
     return { security, suggestions, bugs, score };
   }, [summaryText]);
 
-  // Extract dynamic categories for walkthrough
-  const walkthroughItems = useMemo(() => {
-    if (!summaryText) {
-      return [
-        {
-          icon: ShieldAlert,
-          label: "Security & Authentication",
-          iconColor: "var(--tertiary)",
-          summary:
-            "Evaluates authentication flows, secret storage, SQL sanitization, and session handling.",
-        },
-        {
-          icon: Zap,
-          label: "Performance & Caching",
-          iconColor: "var(--primary)",
-          summary:
-            "Identifies inefficient loops, unnecessary re-renders, memory leaks, and query bottlenecks.",
-        },
-        {
-          icon: FlaskConical,
-          label: "Test Coverage & Reliability",
-          iconColor: "#4ade80",
-          summary:
-            "Verifies test suite additions, edge cases, error handling, and regression safety.",
-        },
-      ];
-    }
+  // Overall PR Churn calculations
+  const totalAdditions = useMemo(
+    () => files.reduce((acc, f) => acc + f.additions, 0),
+    [files],
+  );
+  const totalDeletions = useMemo(
+    () => files.reduce((acc, f) => acc + f.deletions, 0),
+    [files],
+  );
+  const netChurn = totalAdditions - totalDeletions;
 
-    const items: {
-      icon: typeof ShieldAlert;
-      label: string;
-      iconColor: string;
-      summary: string;
-    }[] = [];
+  // Find the file with the highest churn for 1-click triage
+  const highestChurnFile = useMemo(() => {
+    if (files.length === 0) return null;
+    return [...files].sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions))[0];
+  }, [files]);
 
-    if (summaryText.toLowerCase().includes("security")) {
-      items.push({
-        icon: ShieldAlert,
-        label: "Security Audit & Vulnerabilities",
-        iconColor: "var(--tertiary)",
-        summary:
-          "Identified security findings regarding input sanitization and secure query handling.",
-      });
-    }
-    if (summaryText.toLowerCase().includes("performance")) {
-      items.push({
-        icon: Zap,
-        label: "Performance Optimization & Resource Usage",
-        iconColor: "var(--primary)",
-        summary:
-          "Highlights potential bottlenecks in iteration, memory allocations, and database queries.",
-      });
-    }
-    if (summaryText.toLowerCase().includes("best practice")) {
-      items.push({
-        icon: Sparkles,
-        label: "Best Practices & Code Maintainability",
-        iconColor: "#38bdf8",
-        summary:
-          "Checks adherence to clean architecture, consistent naming, and framework patterns.",
-      });
-    }
-    if (items.length === 0) {
-      items.push({
-        icon: FlaskConical,
-        label: "Code Quality Assessment",
-        iconColor: "#4ade80",
-        summary: "Automated analysis of changed code and overall pull request health.",
-      });
-    }
-    return items;
-  }, [summaryText]);
+  // Filtered files list
+  const filteredFiles = useMemo(() => {
+    if (!fileSearch.trim()) return files;
+    const query = fileSearch.toLowerCase().trim();
+    return files.filter((f) => f.filename.toLowerCase().includes(query));
+  }, [files, fileSearch]);
 
   return (
-    <div className="mx-auto max-w-7xl pb-12">
+    <div className="mx-auto max-w-7xl pb-16">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Left column — main content */}
+        {/* Left column (2-cols wide) */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Executive Summary */}
+          {/* 1. AI Executive Summary */}
           <div
             className="ghost-border relative overflow-hidden rounded-xl p-6"
             style={{ background: "var(--surface-low)" }}
@@ -211,12 +196,23 @@ export function PrOverviewTab({
                 <Sparkles className="h-5 w-5" style={{ color: "var(--primary)" }} aria-hidden />
               </div>
               <div className="min-w-0 flex-1">
-                <h2
-                  className="mb-3 text-base font-semibold"
-                  style={{ color: "var(--on-surface)", fontFamily: "var(--font-geist-sans)" }}
-                >
-                  AI Executive Summary
-                </h2>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2
+                    className="text-base font-semibold"
+                    style={{ color: "var(--on-surface)", fontFamily: "var(--font-geist-sans)" }}
+                  >
+                    AI Executive Summary
+                  </h2>
+                  {latestRun && (
+                    <span
+                      className="text-xs"
+                      style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
+                    >
+                      Updated {duration !== "—" ? `in ${duration}` : "just now"}
+                    </span>
+                  )}
+                </div>
+
                 {isLoadingRun ? (
                   <div className="space-y-2.5">
                     <div
@@ -243,69 +239,212 @@ export function PrOverviewTab({
                       ? "AI review failed. Re-run the review to generate a summary."
                       : latestRun?.status === "RUNNING" || latestRun?.status === "PENDING"
                       ? "AI review is currently analyzing this pull request…"
-                      : "No AI summary yet. Click 'Run Review' to generate instant insights."}
+                      : "No AI summary yet. Click 'Run Review' above to generate instant insights."}
                   </p>
                 )}
               </div>
             </div>
           </div>
 
-          {/* AI Walkthrough Accordions */}
-          <div className="space-y-3">
+          {/* 2. Quick Triage Actions */}
+          <div
+            className="ghost-border rounded-xl p-5"
+            style={{ background: "var(--surface-low)" }}
+          >
             <h3
-              className="ml-1 text-xs font-semibold uppercase tracking-wider"
+              className="mb-3.5 text-xs font-semibold uppercase tracking-wider"
               style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
             >
-              AI Walkthrough
+              Quick Triage Actions
             </h3>
-            {walkthroughItems.map(({ icon: Icon, label, iconColor, summary }, idx) => (
-              <details
-                key={label}
-                open={idx === 0}
-                className="ghost-border group overflow-hidden rounded-xl transition-all"
-                style={{ background: "var(--surface-low)" }}
+            <div className="flex flex-wrap gap-2.5">
+              <button
+                type="button"
+                onClick={onViewAllDiffs}
+                className="btn-primary inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold uppercase tracking-wider"
+                style={{ fontFamily: "var(--font-space-grotesk)" }}
               >
-                <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 transition-colors hover:bg-[var(--surface-container)]">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
-                      style={{ background: "rgba(53,52,55,0.7)" }}
-                    >
-                      <Icon className="h-4 w-4" style={{ color: iconColor }} aria-hidden />
-                    </div>
-                    <span
-                      className="text-sm font-semibold"
-                      style={{ color: "var(--on-surface)", fontFamily: "var(--font-geist-sans)" }}
-                    >
-                      {label}
-                    </span>
-                  </div>
-                  <span
-                    className="text-xs font-bold transition-transform duration-200 group-open:rotate-180"
-                    style={{ color: "var(--on-surface-variant)" }}
-                  >
-                    ▾
-                  </span>
-                </summary>
-                <div
-                  className="border-t px-5 pb-5 pt-3"
-                  style={{ borderColor: "rgba(70,69,84,0.15)" }}
+                <GitMerge className="h-4 w-4" aria-hidden />
+                Review All Diffs ({files.length} files)
+              </button>
+
+              {highestChurnFile && (
+                <button
+                  type="button"
+                  onClick={() => onSelectFile?.(highestChurnFile.filename)}
+                  className="ghost-border inline-flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-xs font-semibold transition-colors hover:bg-[var(--surface-container)]"
+                  style={{ color: "var(--on-surface)", fontFamily: "var(--font-space-grotesk)" }}
                 >
-                  <p
-                    className="text-sm leading-relaxed"
-                    style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-inter)" }}
-                  >
-                    {summary}
-                  </p>
-                </div>
-              </details>
-            ))}
+                  <Flame className="h-4 w-4 text-[var(--tertiary)]" aria-hidden />
+                  Jump to Highest Churn: <code className="font-mono">{highestChurnFile.filename}</code>
+                </button>
+              )}
+
+              {htmlUrl && (
+                <a
+                  href={htmlUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ghost-border inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2.5 text-xs font-semibold transition-opacity hover:opacity-80"
+                  style={{ color: "var(--primary)", fontFamily: "var(--font-space-grotesk)" }}
+                >
+                  Open on GitHub
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* 3. Detailed Changed Files & Churn Breakdown */}
+          <div
+            className="ghost-border rounded-xl p-6"
+            style={{ background: "var(--surface-low)" }}
+          >
+            {/* Header & Search */}
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3
+                  className="text-base font-semibold"
+                  style={{ color: "var(--on-surface)", fontFamily: "var(--font-geist-sans)" }}
+                >
+                  Changed Files & Churn Breakdown
+                </h3>
+                <p
+                  className="mt-0.5 text-xs"
+                  style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
+                >
+                  {files.length} modified files in this PR
+                </p>
+              </div>
+
+              {/* File Search */}
+              <div className="relative w-full sm:w-64">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--on-surface-variant)]"
+                  aria-hidden
+                />
+                <input
+                  type="text"
+                  value={fileSearch}
+                  onChange={(e) => setFileSearch(e.target.value)}
+                  placeholder="Filter files…"
+                  className="ghost-border w-full rounded-lg bg-[var(--surface-container)] py-1.5 pl-8 pr-3 text-xs text-[var(--on-surface)] outline-none placeholder:text-[var(--on-surface-variant)] focus:ring-1 focus:ring-[var(--primary)]"
+                  style={{ fontFamily: "var(--font-space-grotesk)" }}
+                />
+              </div>
+            </div>
+
+            {/* File List Table */}
+            <div className="space-y-2">
+              {filteredFiles.length === 0 ? (
+                <p
+                  className="py-8 text-center text-xs"
+                  style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
+                >
+                  No files matching &ldquo;{fileSearch}&rdquo;
+                </p>
+              ) : (
+                filteredFiles.map((file) => {
+                  const churnTotal = file.additions + file.deletions;
+                  const addPercent =
+                    churnTotal > 0 ? Math.round((file.additions / churnTotal) * 100) : 0;
+                  const ext = getFileExtension(file.filename);
+
+                  return (
+                    <div
+                      key={file.filename}
+                      className="ghost-border flex flex-col gap-3 rounded-lg p-3 transition-colors hover:bg-[var(--surface-container)] sm:flex-row sm:items-center sm:justify-between"
+                      style={{ background: "var(--surface-container-lowest)" }}
+                    >
+                      {/* Left: Icon, Filename & Status */}
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="shrink-0">
+                          <StatusIcon status={file.status} />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="truncate text-xs font-semibold"
+                              style={{
+                                color: "var(--on-surface)",
+                                fontFamily: "var(--font-geist-mono)",
+                              }}
+                              title={file.filename}
+                            >
+                              {file.filename}
+                            </span>
+                            <span
+                              className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                              style={{
+                                background: "var(--surface-high)",
+                                color: "var(--on-surface-variant)",
+                                fontFamily: "var(--font-space-grotesk)",
+                              }}
+                            >
+                              {ext}
+                            </span>
+                          </div>
+                          <span
+                            className="text-[11px] capitalize"
+                            style={{
+                              color: "var(--on-surface-variant)",
+                              fontFamily: "var(--font-space-grotesk)",
+                            }}
+                          >
+                            {file.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right: Churn Bar & 1-Click Diff Jump Button */}
+                      <div className="flex shrink-0 items-center gap-4">
+                        {/* Visual Churn Ratio Bar */}
+                        <div className="flex flex-col items-end gap-1">
+                          <div className="flex items-center gap-2 text-xs font-bold" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+                            <span style={{ color: "#4ade80" }}>+{file.additions}</span>
+                            <span style={{ color: "var(--error)" }}>−{file.deletions}</span>
+                          </div>
+                          <div className="flex h-1.5 w-24 overflow-hidden rounded-full bg-[var(--surface-high)]">
+                            <div
+                              style={{
+                                width: `${addPercent}%`,
+                                background: "#4ade80",
+                              }}
+                            />
+                            <div
+                              style={{
+                                width: `${100 - addPercent}%`,
+                                background: "var(--error)",
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Inspect Diff Button */}
+                        <button
+                          type="button"
+                          onClick={() => onSelectFile?.(file.filename)}
+                          className="ghost-border inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-[var(--surface-high)]"
+                          style={{
+                            color: "var(--primary)",
+                            fontFamily: "var(--font-space-grotesk)",
+                          }}
+                        >
+                          Inspect Diff
+                          <ArrowRight className="h-3 w-3" aria-hidden />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Right column — widgets */}
+        {/* Right column (1-col wide sidebar widgets) */}
         <div className="space-y-6">
-          {/* PR Health Scorecard */}
+          {/* 1. PR Health Scorecard */}
           <div
             className="ghost-border rounded-xl p-6"
             style={{ background: "var(--surface-low)" }}
@@ -365,75 +504,64 @@ export function PrOverviewTab({
             </div>
           </div>
 
-          {/* Impacted Files List */}
+          {/* 2. PR Churn & Impact Overview Strip */}
           <div
             className="ghost-border rounded-xl p-6"
             style={{ background: "var(--surface-low)" }}
           >
-            <div className="mb-4 flex items-center justify-between">
-              <h3
-                className="text-xs font-semibold uppercase tracking-wider"
-                style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
+            <h3
+              className="mb-4 text-xs font-semibold uppercase tracking-wider"
+              style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
+            >
+              PR Churn Metrics
+            </h3>
+
+            <div className="space-y-3">
+              <div
+                className="flex items-center justify-between rounded-lg p-3"
+                style={{ background: "var(--surface-container-lowest)" }}
               >
-                Impacted Files
-              </h3>
-              <span
-                className="rounded px-2 py-0.5 text-xs font-semibold"
-                style={{
-                  background: "var(--surface-high)",
-                  color: "var(--on-surface-variant)",
-                  fontFamily: "var(--font-space-grotesk)",
-                }}
+                <span className="text-xs text-[var(--on-surface-variant)]" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+                  Total Lines Added
+                </span>
+                <span className="text-sm font-bold text-[#4ade80]" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+                  +{totalAdditions}
+                </span>
+              </div>
+
+              <div
+                className="flex items-center justify-between rounded-lg p-3"
+                style={{ background: "var(--surface-container-lowest)" }}
               >
-                {files.length} {files.length === 1 ? "file" : "files"}
-              </span>
-            </div>
-            <div className="space-y-1">
-              {files.slice(0, 6).map((file) => (
-                <button
-                  key={file.filename}
-                  type="button"
-                  onClick={() => onSelectFile?.(file.filename)}
-                  className="group flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-[var(--surface-container)]"
+                <span className="text-xs text-[var(--on-surface-variant)]" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+                  Total Lines Deleted
+                </span>
+                <span className="text-sm font-bold text-[var(--error)]" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+                  −{totalDeletions}
+                </span>
+              </div>
+
+              <div
+                className="flex items-center justify-between rounded-lg p-3"
+                style={{ background: "var(--surface-container-lowest)" }}
+              >
+                <span className="text-xs text-[var(--on-surface-variant)]" style={{ fontFamily: "var(--font-space-grotesk)" }}>
+                  Net Impact
+                </span>
+                <span
+                  className="text-sm font-bold"
+                  style={{
+                    color: netChurn >= 0 ? "var(--primary)" : "var(--tertiary)",
+                    fontFamily: "var(--font-space-grotesk)",
+                  }}
                 >
-                  <FileCode2
-                    className="h-4 w-4 shrink-0 text-[var(--on-surface-variant)] transition-colors group-hover:text-[var(--primary)]"
-                    aria-hidden
-                  />
-                  <span
-                    className="min-w-0 flex-1 truncate text-xs font-medium transition-colors group-hover:text-[var(--primary)]"
-                    style={{ color: "var(--on-surface)", fontFamily: "var(--font-geist-mono)" }}
-                  >
-                    {file.filename}
-                  </span>
-                  <span
-                    className="shrink-0 text-xs font-semibold"
-                    style={{ fontFamily: "var(--font-space-grotesk)" }}
-                  >
-                    <span style={{ color: "#4ade80" }}>+{file.additions}</span>{" "}
-                    <span style={{ color: "var(--error)" }}>−{file.deletions}</span>
-                  </span>
-                  <ArrowRight
-                    className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                    style={{ color: "var(--primary)" }}
-                    aria-hidden
-                  />
-                </button>
-              ))}
-              {files.length > 6 && (
-                <button
-                  type="button"
-                  onClick={() => onSelectFile?.(files[6]?.filename ?? "")}
-                  className="w-full pt-1 text-center text-xs font-medium transition-opacity hover:opacity-80"
-                  style={{ color: "var(--primary)", fontFamily: "var(--font-space-grotesk)" }}
-                >
-                  +{files.length - 6} more files (view all diffs →)
-                </button>
-              )}
+                  {netChurn >= 0 ? `+${netChurn}` : netChurn} lines
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* AI Model & Run Info Card */}
+          {/* 3. AI Model & Review Run Info */}
           {latestRun && (
             <div className="glass-panel ghost-border rounded-xl p-5">
               <div className="flex items-start gap-3.5">
