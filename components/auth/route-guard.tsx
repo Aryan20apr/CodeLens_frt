@@ -88,7 +88,7 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
   useEffect(() => {
     if (state === "resolving") return;
     if (mode === "protected" && state === "unauthed") {
-      router.replace("/login");
+      window.location.href = "/login";
     }
     if (mode === "guest-only" && state === "authed") {
       router.replace("/dashboard");
