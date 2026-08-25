@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { extractApiErrorMessage, unwrapApiResponse } from "@/lib/api-response";
 import { authFetch } from "@/lib/auth/auth-fetch";
 import { createGithubInstallState } from "@/lib/github/install-state";
 
@@ -15,14 +16,6 @@ export class GithubInstallApiError extends Error {
     super(message);
     this.name = "GithubInstallApiError";
   }
-}
-
-function getErrorMessage(data: unknown): string {
-  if (data && typeof data === "object" && "message" in data) {
-    const message = (data as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim().length > 0) return message;
-  }
-  return "Could not start GitHub App installation";
 }
 
 function parseInstallUrl(raw: string): string {
@@ -62,18 +55,25 @@ export async function getGithubInstallUrl(accessToken: string): Promise<GithubIn
     { accessToken },
   );
 
-  const data: unknown = await res.json().catch(() => ({}));
+  const rawJson: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new GithubInstallApiError(getErrorMessage(data), res.status, data);
+    throw new GithubInstallApiError(
+      extractApiErrorMessage(rawJson, "Could not start GitHub App installation"),
+      res.status,
+      rawJson,
+    );
   }
 
+  const data = unwrapApiResponse<unknown>(rawJson);
   const installUrl =
     data && typeof data === "object" && "installUrl" in data
       ? (data as { installUrl?: unknown }).installUrl
-      : undefined;
+      : typeof data === "string"
+        ? data
+        : undefined;
 
   if (typeof installUrl !== "string") {
-    throw new GithubInstallApiError("Install URL was missing from the API response", res.status, data);
+    throw new GithubInstallApiError("Install URL was missing from the API response", res.status, rawJson);
   }
 
   return { installUrl: parseInstallUrl(installUrl) };

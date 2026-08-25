@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { extractApiErrorMessage, unwrapApiResponse } from "@/lib/api-response";
 import type { ApiErrorBody, LoginResponse } from "@/lib/auth/types";
 
 export class LoginApiError extends Error {
@@ -13,7 +14,7 @@ export class LoginApiError extends Error {
 }
 
 function parseErrorBody(data: unknown): ApiErrorBody {
-  if (data && typeof data === "object" && "message" in data) return data as ApiErrorBody;
+  if (data && typeof data === "object") return data as ApiErrorBody;
   return {};
 }
 
@@ -33,12 +34,9 @@ export async function loginUser(body: LoginRequestBody): Promise<LoginResponse> 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
     const errBody = parseErrorBody(data);
-    const message =
-      typeof errBody.message === "string" && errBody.message.length > 0
-        ? errBody.message
-        : "Sign in failed";
+    const message = extractApiErrorMessage(data, "Sign in failed");
     throw new LoginApiError(message, res.status, errBody);
   }
 
-  return data as LoginResponse;
+  return unwrapApiResponse<LoginResponse>(data);
 }

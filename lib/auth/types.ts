@@ -27,10 +27,13 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+export type { ApiResponse, ApiErrorResponse } from "@/lib/api-response";
+
 export interface ApiErrorBody {
   statusCode?: number;
-  message?: string;
+  message?: string | string[];
   error?: string;
+  data?: unknown;
   details?: unknown;
 }
 

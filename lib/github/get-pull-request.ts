@@ -1,16 +1,9 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { extractApiErrorMessage, unwrapApiResponse } from "@/lib/api-response";
 import { authFetch } from "@/lib/auth/auth-fetch";
 import { GithubInstallApiError } from "@/lib/github/github-install";
 import { normalizeRepoId } from "@/lib/github/repo-id";
 import type { GithubPullRequestDetail } from "@/lib/github/types";
-
-function getErrorMessage(data: unknown): string {
-  if (data && typeof data === "object" && "message" in data) {
-    const message = (data as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim().length > 0) return message;
-  }
-  return "Could not load pull request";
-}
 
 function parsePullRequestDetail(value: unknown): GithubPullRequestDetail | null {
   if (!value || typeof value !== "object") return null;
@@ -63,14 +56,19 @@ export async function getPullRequest(
     { accessToken },
   );
 
-  const data: unknown = await res.json().catch(() => ({}));
+  const rawJson: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new GithubInstallApiError(getErrorMessage(data), res.status, data);
+    throw new GithubInstallApiError(
+      extractApiErrorMessage(rawJson, "Could not load pull request"),
+      res.status,
+      rawJson,
+    );
   }
 
+  const data = unwrapApiResponse<unknown>(rawJson);
   const detail = parsePullRequestDetail(data);
   if (!detail) {
-    throw new GithubInstallApiError("Pull request response was invalid", 200, data);
+    throw new GithubInstallApiError("Pull request response was invalid", 200, rawJson);
   }
   return detail;
 }

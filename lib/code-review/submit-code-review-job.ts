@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { extractApiErrorMessage, unwrapApiResponse } from "@/lib/api-response";
 import { authFetch } from "@/lib/auth/auth-fetch";
 import type {
   CodeReviewJobCreatedResponse,
@@ -15,14 +16,6 @@ export class CodeReviewJobApiError extends Error {
     super(message);
     this.name = "CodeReviewJobApiError";
   }
-}
-
-function getErrorMessage(data: unknown): string {
-  if (data && typeof data === "object" && "message" in data) {
-    const message = (data as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim().length > 0) return message;
-  }
-  return "Code review submission failed";
 }
 
 export async function submitCodeReviewJob(
@@ -44,10 +37,14 @@ export async function submitCodeReviewJob(
 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new CodeReviewJobApiError(getErrorMessage(data), res.status, data);
+    throw new CodeReviewJobApiError(
+      extractApiErrorMessage(data, "Code review submission failed"),
+      res.status,
+      data,
+    );
   }
 
-  return data as CodeReviewJobCreatedResponse;
+  return unwrapApiResponse<CodeReviewJobCreatedResponse>(data);
 }
 
 export async function getCodeReviewJobDetails(
@@ -65,8 +62,12 @@ export async function getCodeReviewJobDetails(
 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new CodeReviewJobApiError(getErrorMessage(data), res.status, data);
+    throw new CodeReviewJobApiError(
+      extractApiErrorMessage(data, "Could not fetch code review job details"),
+      res.status,
+      data,
+    );
   }
 
-  return data as CodeReviewJobDetails;
+  return unwrapApiResponse<CodeReviewJobDetails>(data);
 }

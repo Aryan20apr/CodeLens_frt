@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { unwrapApiResponse } from "@/lib/api-response";
 import type { LoginResponse } from "@/lib/auth/types";
 
 let inFlight: Promise<LoginResponse | null> | null = null;
@@ -23,7 +24,8 @@ export function tryRefreshSession(): Promise<LoginResponse | null> {
       return null;
     }
     if (!res.ok) return null;
-    const data: unknown = await res.json().catch(() => null);
+    const json: unknown = await res.json().catch(() => null);
+    const data = unwrapApiResponse<unknown>(json);
     if (!data || typeof data !== "object") return null;
     if (!("accessToken" in data) || !("user" in data)) return null;
     return data as LoginResponse;

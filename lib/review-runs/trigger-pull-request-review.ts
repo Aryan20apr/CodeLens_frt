@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { unwrapApiResponse } from "@/lib/api-response";
 import { authFetch } from "@/lib/auth/auth-fetch";
 import { normalizeRepoId } from "@/lib/github/repo-id";
 import { getReviewRunErrorMessage, ReviewRunApiError } from "@/lib/review-runs/review-run-api-error";
@@ -33,18 +34,19 @@ export async function triggerPullRequestReview(
     { accessToken },
   );
 
-  const data: unknown = await res.json().catch(() => ({}));
+  const rawJson: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new ReviewRunApiError(
-      getReviewRunErrorMessage(data, "Could not start pull request review"),
+      getReviewRunErrorMessage(rawJson, "Could not start pull request review"),
       res.status,
-      data,
+      rawJson,
     );
   }
 
+  const data = unwrapApiResponse<unknown>(rawJson);
   const reviewRunId = parseReviewRunId(data);
   if (!reviewRunId) {
-    throw new ReviewRunApiError("Review run response was invalid", res.status, data);
+    throw new ReviewRunApiError("Review run response was invalid", res.status, rawJson);
   }
 
   return reviewRunId;

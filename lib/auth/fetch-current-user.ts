@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { extractApiErrorMessage, unwrapApiResponse } from "@/lib/api-response";
 import { authFetch } from "@/lib/auth/auth-fetch";
 import type { ApiErrorBody, AuthUser, CurrentUserResponse } from "@/lib/auth/types";
 
@@ -14,7 +15,7 @@ export class CurrentUserApiError extends Error {
 }
 
 function parseErrorBody(data: unknown): ApiErrorBody {
-  if (data && typeof data === "object" && "message" in data) return data as ApiErrorBody;
+  if (data && typeof data === "object") return data as ApiErrorBody;
   return {};
 }
 
@@ -42,12 +43,9 @@ export async function fetchCurrentUser(accessToken: string): Promise<CurrentUser
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
     const errBody = parseErrorBody(data);
-    const message =
-      typeof errBody.message === "string" && errBody.message.length > 0
-        ? errBody.message
-        : "Could not load your profile";
+    const message = extractApiErrorMessage(data, "Could not load your profile");
     throw new CurrentUserApiError(message, res.status, errBody);
   }
 
-  return data as CurrentUserResponse;
+  return unwrapApiResponse<CurrentUserResponse>(data);
 }

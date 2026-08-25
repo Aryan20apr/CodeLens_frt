@@ -1,9 +1,10 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { extractApiErrorMessage } from "@/lib/api-response";
 import { authFetch } from "@/lib/auth/auth-fetch";
 
 /**
  * POSTs to the logout endpoint with the access token and same-origin refresh cookie
- * (sent via `credentials: "include"`). API responds 204; Set-Cookie may clear refresh_token.
+ * (sent via `credentials: "include"`). API responds 200 or 204.
  */
 export async function logoutWithAccessToken(accessToken: string): Promise<void> {
   const res = await authFetch(
@@ -12,9 +13,9 @@ export async function logoutWithAccessToken(accessToken: string): Promise<void> 
     { accessToken },
   );
 
-  if (res.status !== 204) {
-    throw new Error(
-      res.status === 0 ? "Logout request could not be completed" : `Logout failed (${res.status})`,
-    );
+  if (!res.ok && res.status !== 204) {
+    const data: unknown = await res.json().catch(() => ({}));
+    const message = extractApiErrorMessage(data, `Logout failed (${res.status})`);
+    throw new Error(message);
   }
 }

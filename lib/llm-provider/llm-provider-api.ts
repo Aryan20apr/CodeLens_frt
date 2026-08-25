@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { extractApiErrorMessage, unwrapApiResponse } from "@/lib/api-response";
 import { authFetch } from "@/lib/auth/auth-fetch";
 import type {
   ActiveProvider,
@@ -17,49 +18,6 @@ export class LlmProviderApiError extends Error {
     super(message);
     this.name = "LlmProviderApiError";
   }
-}
-
-function extractMessage(data: unknown): string {
-  if (data && typeof data === "object") {
-    const obj = data as Record<string, unknown>;
-
-    // Handle nested validation details in `data` or `details` (e.g. { data: { apiKey: ["..."] } })
-    const validationSource =
-      obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)
-        ? (obj.data as Record<string, unknown>)
-        : obj.details && typeof obj.details === "object" && !Array.isArray(obj.details)
-          ? (obj.details as Record<string, unknown>)
-          : null;
-
-    const detailMessages: string[] = [];
-    if (validationSource) {
-      for (const [key, val] of Object.entries(validationSource)) {
-        if (Array.isArray(val) && val.length > 0) {
-          detailMessages.push(`${key}: ${val.join(", ")}`);
-        } else if (typeof val === "string" && val.trim().length > 0) {
-          detailMessages.push(`${key}: ${val.trim()}`);
-        }
-      }
-    }
-
-    const mainMessage =
-      typeof obj.message === "string" && obj.message.trim().length > 0
-        ? obj.message.trim()
-        : Array.isArray(obj.message)
-          ? obj.message.join(", ")
-          : typeof obj.error === "string" && obj.error.trim().length > 0
-            ? obj.error.trim()
-            : null;
-
-    if (detailMessages.length > 0) {
-      return mainMessage ? `${mainMessage}: ${detailMessages.join("; ")}` : detailMessages.join("; ");
-    }
-
-    if (mainMessage) {
-      return mainMessage;
-    }
-  }
-  return "LLM provider API request failed";
 }
 
 async function llmFetch(
@@ -82,18 +40,14 @@ async function llmFetch(
 
   const json: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new LlmProviderApiError(extractMessage(json), res.status, json);
+    throw new LlmProviderApiError(
+      extractApiErrorMessage(json, "LLM provider API request failed"),
+      res.status,
+      json,
+    );
   }
 
-  // Automatically unwrap standardized API response envelope: { success: boolean, data: T, message?: string }
-  if (json && typeof json === "object" && "success" in json) {
-    const envelope = json as { success?: boolean; data?: unknown };
-    if ("data" in envelope && envelope.data !== undefined) {
-      return envelope.data;
-    }
-  }
-
-  return json;
+  return unwrapApiResponse<unknown>(json);
 }
 
 export async function fetchProviderKeys(
