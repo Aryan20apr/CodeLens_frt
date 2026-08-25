@@ -36,6 +36,14 @@ const STATUS_STYLES: Record<string, { bg: string; text: string }> = {
   PENDING: { bg: "rgba(192,193,255,0.10)", text: "var(--on-surface-variant)" },
 };
 
+function cleanSummaryPreview(text: string): string {
+  return text
+    .replace(/^##\s*(Overview|Summary)\s*/i, "")
+    .replace(/\*\*/g, "")
+    .replace(/`/g, "")
+    .trim();
+}
+
 export function PrRunHistoryTab({
   runs,
   isLoading,
@@ -132,10 +140,10 @@ export function PrRunHistoryTab({
                 </div>
                 {run.summaryText && (
                   <p
-                    className="mt-2 line-clamp-2 text-sm"
+                    className="mt-2 line-clamp-2 text-sm leading-relaxed"
                     style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-inter)" }}
                   >
-                    {run.summaryText}
+                    {cleanSummaryPreview(run.summaryText)}
                   </p>
                 )}
               </div>

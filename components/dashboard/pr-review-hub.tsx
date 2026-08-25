@@ -12,6 +12,10 @@ import {
   Sparkles,
   GitMerge,
   History,
+  Copy,
+  Check,
+  ShieldAlert,
+  FileCode2,
 } from "lucide-react";
 import { getAuthSession } from "@/lib/auth/session";
 import { getPullRequest } from "@/lib/github/get-pull-request";
@@ -68,6 +72,7 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
   const [isLoading, setIsLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState<PrTab>("overview");
+  const [copiedReview, setCopiedReview] = useState(false);
 
   const fileFromQuery = searchParams.get("file");
   const diffView = parseDiffViewType(searchParams.get("view"));
@@ -263,6 +268,29 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
+  function handleJumpToFile(filename: string) {
+    const target = files.find((f) => f.filename === filename);
+    if (target) {
+      const key = pullRequestFileKey(target);
+      setSelectedFileKey(key);
+      updateSearchParams((p) => p.set("file", key));
+    }
+    setActiveTab("diff");
+  }
+
+  async function handleCopyReview() {
+    if (!latestRun?.summaryText) return;
+    try {
+      await navigator.clipboard.writeText(
+        `# AI Code Review Summary — ${detail?.title ?? `PR #${pullNumber}`}\n\n${latestRun.summaryText}`,
+      );
+      setCopiedReview(true);
+      setTimeout(() => setCopiedReview(false), 2500);
+    } catch {
+      // ignore clipboard error
+    }
+  }
+
   const effectiveSelectedFileKey = useMemo(() => {
     if (files.length === 0) return null;
     const keys = files.map(pullRequestFileKey);
@@ -280,6 +308,19 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
   const totalDeletions = files.reduce((s, f) => s + f.deletions, 0);
   const backHref = githubPagePath(repoId);
 
+  // Derive risk rating based on churn and warnings
+  const riskRating = useMemo(() => {
+    const churn = totalAdditions + totalDeletions;
+    const summary = latestRun?.summaryText?.toLowerCase() ?? "";
+    if (summary.includes("vulnerability") || summary.includes("sql injection") || churn > 500) {
+      return { label: "High Risk", color: "var(--tertiary)", bg: "rgba(255, 183, 131, 0.12)" };
+    }
+    if (churn > 150 || summary.includes("warning")) {
+      return { label: "Moderate Risk", color: "var(--primary)", bg: "rgba(192, 193, 255, 0.12)" };
+    }
+    return { label: "Low Risk", color: "#4ade80", bg: "rgba(74, 222, 128, 0.12)" };
+  }, [totalAdditions, totalDeletions, latestRun?.summaryText]);
+
   const TABS: { id: PrTab; label: string; icon: typeof Sparkles }[] = [
     { id: "overview", label: "Overview & AI Walkthrough", icon: Sparkles },
     { id: "diff", label: `Files & Diffs (${files.length})`, icon: GitMerge },
@@ -287,18 +328,25 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+      {/* Ambient background glow */}
+      <div
+        className="pointer-events-none absolute right-0 top-0 h-96 w-96 rounded-full opacity-5 blur-[120px]"
+        style={{ background: "var(--primary)" }}
+      />
+
       {/* Header */}
       <header
-        className="shrink-0 px-8 py-5"
+        className="shrink-0 px-8 pb-0 pt-6"
         style={{
-          background: "var(--surface-container)",
-          borderBottom: "1px solid rgba(70,69,84,0.2)",
+          background: "rgba(20, 19, 22, 0.95)",
+          backdropFilter: "blur(16px)",
+          borderBottom: "1px solid rgba(70, 69, 84, 0.25)",
         }}
       >
         {/* Breadcrumb */}
         <div
-          className="mb-3 flex items-center gap-1.5 text-sm"
+          className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider"
           style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
         >
           <Link
@@ -309,20 +357,20 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
             {repoFullName ?? "Repositories"}
           </Link>
-          <span aria-hidden>›</span>
-          <span>PR #{detail?.number ?? pullNumber}</span>
+          <span style={{ color: "rgba(70,69,84,0.6)" }}>/</span>
+          <span>Pull Request #{detail?.number ?? pullNumber}</span>
         </div>
 
         {/* Title + actions */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
             <h1
-              className="truncate text-xl font-bold leading-tight"
+              className="truncate text-2xl font-bold tracking-tight"
               style={{ color: "var(--on-surface)", fontFamily: "var(--font-geist-sans)" }}
             >
               {detail?.title ?? "Pull request"}
             </h1>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
               {detail && (
                 <span
                   className="inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-bold capitalize"
@@ -346,20 +394,24 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
                 </span>
               )}
               {latestRun && (
-                <span
-                  className="ghost-border inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs"
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("history")}
+                  className="ghost-border inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors hover:bg-[var(--surface-container)]"
                   style={{
                     background: "var(--surface-high)",
-                    color: "var(--on-surface-variant)",
+                    color: "var(--on-surface)",
                     fontFamily: "var(--font-space-grotesk)",
                   }}
+                  title="View run history"
                 >
-                  Latest: <code className="font-mono">{latestRun.headSha.slice(0, 7)}</code>
-                </span>
+                  <History className="h-3 w-3 text-[var(--primary)]" aria-hidden />
+                  Latest: <code className="font-mono font-semibold">{latestRun.headSha.slice(0, 7)}</code>
+                </button>
               )}
               {files.length > 0 && (
                 <span
-                  className="text-xs"
+                  className="text-xs font-semibold"
                   style={{
                     color: "var(--on-surface-variant)",
                     fontFamily: "var(--font-space-grotesk)",
@@ -367,39 +419,81 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
                 >
                   <span style={{ color: "#4ade80" }}>+{totalAdditions}</span>
                   {" / "}
-                  <span style={{ color: "var(--error)" }}>-{totalDeletions}</span>
+                  <span style={{ color: "var(--error)" }}>−{totalDeletions}</span>
                   {" churn"}
+                </span>
+              )}
+              {latestRun?.summaryText && (
+                <span
+                  className="ghost-border inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold"
+                  style={{
+                    background: riskRating.bg,
+                    color: riskRating.color,
+                    fontFamily: "var(--font-space-grotesk)",
+                  }}
+                >
+                  <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
+                  {riskRating.label}
                 </span>
               )}
             </div>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+
+          {/* Top Actions */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+            {latestRun?.summaryText && (
+              <button
+                type="button"
+                onClick={handleCopyReview}
+                className="ghost-border inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors hover:bg-[var(--surface-container)]"
+                style={{
+                  color: copiedReview ? "#4ade80" : "var(--on-surface-variant)",
+                  fontFamily: "var(--font-space-grotesk)",
+                }}
+              >
+                {copiedReview ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" aria-hidden />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" aria-hidden />
+                    Copy Markdown
+                  </>
+                )}
+              </button>
+            )}
+
             {detail && pullNumber != null && !isLoading && (
               <button
                 type="button"
                 onClick={handleTriggerReview}
                 disabled={isTriggeringReview || isStreaming}
-                className="btn-primary inline-flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:pointer-events-none disabled:opacity-50"
+                className="btn-primary inline-flex h-9 items-center gap-2 rounded-lg px-4 text-xs font-bold uppercase tracking-wider disabled:pointer-events-none disabled:opacity-50"
                 style={{ fontFamily: "var(--font-space-grotesk)" }}
               >
                 {isTriggeringReview || isStreaming ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                 ) : (
-                  <Play className="h-4 w-4" fill="currentColor" aria-hidden />
+                  <Play className="h-3.5 w-3.5" fill="currentColor" aria-hidden />
                 )}
                 {isTriggeringReview
                   ? "Starting…"
                   : isStreaming
                   ? "Reviewing…"
+                  : latestRun
+                  ? "Re-run Review"
                   : "Run Review"}
               </button>
             )}
+
             {detail && (
               <a
                 href={detail.htmlUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="ghost-border inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm transition-opacity hover:opacity-80"
+                className="ghost-border inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-opacity hover:opacity-80"
                 style={{ color: "var(--primary)", fontFamily: "var(--font-space-grotesk)" }}
               >
                 View on GitHub
@@ -411,29 +505,38 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
 
         {/* Tab nav */}
         <nav
-          className="mt-5 flex gap-1"
-          style={{ borderBottom: "1px solid rgba(70,69,84,0.2)" }}
+          className="mt-6 flex gap-2"
           aria-label="PR review sections"
         >
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === id}
-              onClick={() => setActiveTab(id)}
-              className="flex items-center gap-1.5 px-4 pb-3 text-sm transition-colors"
-              style={{
-                color: activeTab === id ? "var(--primary)" : "var(--on-surface-variant)",
-                fontFamily: "var(--font-space-grotesk)",
-                borderBottom: activeTab === id ? "2px solid var(--primary)" : "2px solid transparent",
-                marginBottom: "-1px",
-              }}
-            >
-              <Icon className="h-4 w-4 shrink-0" aria-hidden />
-              {label}
-            </button>
-          ))}
+          {TABS.map(({ id, label, icon: Icon }) => {
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActiveTab(id)}
+                className="relative flex items-center gap-2 px-4 pb-3.5 text-sm font-semibold transition-colors"
+                style={{
+                  color: isActive ? "var(--primary)" : "var(--on-surface-variant)",
+                  fontFamily: "var(--font-space-grotesk)",
+                }}
+              >
+                <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                {label}
+                {isActive && (
+                  <div
+                    className="absolute inset-x-0 bottom-0 h-0.5"
+                    style={{
+                      background: "var(--primary)",
+                      boxShadow: "0 0 10px var(--primary)",
+                    }}
+                  />
+                )}
+              </button>
+            );
+          })}
         </nav>
       </header>
 
@@ -489,51 +592,42 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
         </div>
       )}
 
-      {/* Tab panels */}
+      {/* Main Tab Panels */}
       {isLoading ? (
         <div
           className="flex flex-1 items-center justify-center gap-3 py-16 text-sm"
           style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
         >
           <Loader2 className="h-5 w-5 animate-spin" style={{ color: "var(--primary)" }} aria-hidden />
-          Loading pull request…
+          Loading pull request details…
         </div>
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {/* 1. Overview Tab */}
           {activeTab === "overview" && (
             <div className="flex-1 overflow-y-auto p-8">
               <PrOverviewTab
                 latestRun={latestRun}
                 files={files}
                 isLoadingRun={isLoadingRuns}
+                onSelectFile={handleJumpToFile}
               />
             </div>
           )}
 
+          {/* 2. Files & Diffs Tab */}
           {activeTab === "diff" && (
-            <div className="flex min-h-0 flex-1 flex-col">
-              {files.length > 0 && (
-                <div className="flex shrink-0 justify-end px-8 pt-4">
-                  <DiffViewToggle
-                    value={diffView}
-                    onChange={(next: DiffViewType) => {
-                      updateSearchParams((p) => {
-                        if (next === "unified") p.delete("view");
-                        else p.set("view", next);
-                      });
-                    }}
-                  />
-                </div>
-              )}
+            <div className="flex min-h-0 flex-1 overflow-hidden">
               {files.length === 0 ? (
                 <p
-                  className="px-8 py-16 text-sm"
+                  className="p-8 text-sm"
                   style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
                 >
                   No changed files in this pull request.
                 </p>
               ) : (
-                <div className="flex min-h-0 flex-1">
+                <>
+                  {/* Left Sidebar */}
                   <GithubPrFileSidebar
                     files={files}
                     selectedKey={effectiveSelectedFileKey}
@@ -542,46 +636,110 @@ export function PrReviewHub({ repoId, pullNumber: pullNumberParam }: PrReviewHub
                       updateSearchParams((p) => p.set("file", key));
                     }}
                   />
+
+                  {/* Main Diff Area with Sticky Integrated Header */}
                   <div
-                    className="min-w-0 flex-1 overflow-y-auto p-6"
+                    className="flex min-w-0 flex-1 flex-col overflow-hidden"
                     style={{ background: "var(--surface)" }}
                   >
-                    {selectedFile ? (
-                      <>
-                        <h2
-                          className="mb-4 truncate text-sm font-semibold"
-                          style={{ color: "var(--on-surface)", fontFamily: "var(--font-geist-mono)" }}
-                        >
-                          {selectedFile.filename}
-                        </h2>
-                        <PrDiffFile file={selectedFile} viewType={diffView} />
-                      </>
-                    ) : (
-                      <p
-                        className="text-sm"
-                        style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
+                    {selectedFile && (
+                      <header
+                        className="flex shrink-0 items-center justify-between border-b px-6 py-3"
+                        style={{
+                          background: "var(--surface-low)",
+                          borderColor: "rgba(70,69,84,0.2)",
+                        }}
                       >
-                        Select a file to view its diff.
-                      </p>
+                        <div className="flex min-w-0 items-center gap-3">
+                          <FileCode2
+                            className="h-4 w-4 shrink-0"
+                            style={{ color: "var(--primary)" }}
+                            aria-hidden
+                          />
+                          <span
+                            className="truncate text-sm font-semibold"
+                            style={{
+                              color: "var(--on-surface)",
+                              fontFamily: "var(--font-geist-mono)",
+                            }}
+                          >
+                            {selectedFile.filename}
+                          </span>
+                          <span
+                            className="rounded px-2 py-0.5 text-xs font-bold capitalize"
+                            style={{
+                              background: "var(--surface-high)",
+                              color: "var(--on-surface-variant)",
+                              fontFamily: "var(--font-space-grotesk)",
+                            }}
+                          >
+                            {selectedFile.status}
+                          </span>
+                          <span
+                            className="text-xs font-semibold"
+                            style={{ fontFamily: "var(--font-space-grotesk)" }}
+                          >
+                            <span style={{ color: "#4ade80" }}>+{selectedFile.additions}</span>{" "}
+                            <span style={{ color: "var(--error)" }}>−{selectedFile.deletions}</span>
+                          </span>
+                        </div>
+
+                        {/* Diff View Toggle neatly docked on the right */}
+                        <div className="shrink-0">
+                          <DiffViewToggle
+                            value={diffView}
+                            onChange={(next: DiffViewType) => {
+                              updateSearchParams((p) => {
+                                if (next === "unified") p.delete("view");
+                                else p.set("view", next);
+                              });
+                            }}
+                          />
+                        </div>
+                      </header>
                     )}
+
+                    {/* Diff Body */}
+                    <div className="flex-1 overflow-y-auto p-6">
+                      {selectedFile ? (
+                        <PrDiffFile
+                          file={selectedFile}
+                          viewType={diffView}
+                          showHeader={false}
+                        />
+                      ) : (
+                        <p
+                          className="text-sm"
+                          style={{
+                            color: "var(--on-surface-variant)",
+                            fontFamily: "var(--font-space-grotesk)",
+                          }}
+                        >
+                          Select a file to view its diff.
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
           )}
 
+          {/* 3. History Tab */}
           {activeTab === "history" && (
             <div className="flex-1 overflow-y-auto p-8">
-              <PrRunHistoryTab
-                runs={runs}
-                isLoading={isLoadingRuns}
-                error={runsError}
-                activeRunId={activeRunId}
-                onSelectRun={setActiveRunId}
-              />
+              <div className="mx-auto max-w-4xl">
+                <PrRunHistoryTab
+                  runs={runs}
+                  isLoading={isLoadingRuns}
+                  error={runsError}
+                  activeRunId={activeRunId}
+                  onSelectRun={setActiveRunId}
+                />
+              </div>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
