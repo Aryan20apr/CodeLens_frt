@@ -139,6 +139,10 @@ export function getProviderMeta(providerId: string): ProviderMeta {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Main Component: ByokSettings
+// ─────────────────────────────────────────────────────────────────
+
 export function ByokSettings() {
   const [keys, setKeys] = useState<LlmProviderKey[]>([]);
   const [active, setActive] = useState<ActiveProvider | null>(null);
@@ -170,8 +174,39 @@ export function ByokSettings() {
   }, []);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    let isCancelled = false;
+    async function loadInitial() {
+      const session = getAuthSession();
+      if (!session?.accessToken) {
+        if (!isCancelled) setLoading(false);
+        return;
+      }
+      try {
+        const [keysData, activeData] = await Promise.all([
+          fetchProviderKeys(session.accessToken),
+          fetchActiveProvider(session.accessToken).catch(() => null),
+        ]);
+        if (!isCancelled) {
+          setKeys(keysData);
+          setActive(activeData);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setFetchError(
+            err instanceof LlmProviderApiError
+              ? err.message
+              : "Failed to load LLM provider configuration.",
+          );
+          setLoading(false);
+        }
+      }
+    }
+    void loadInitial();
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   function handleKeySaved(newKey: LlmProviderKey, models: string[]) {
     setKeys((prev) => {
@@ -187,7 +222,6 @@ export function ByokSettings() {
     });
     setAddModalOpen(false);
 
-    // If no active provider was set, default to this newly configured one
     if (!active && models.length > 0) {
       setActive({ provider: newKey.provider, model: models[0] });
     }
@@ -210,10 +244,13 @@ export function ByokSettings() {
     return <FetchErrorBanner message={fetchError} onRetry={loadData} />;
   }
 
+  const activeKey = `${active?.provider ?? "none"}-${active?.model ?? "none"}-${keys.map((k) => k.provider).join(",")}`;
+
   return (
     <div className="flex flex-col gap-8">
       {/* Active Model Selector Bar / Banner */}
       <ActiveModelPanel
+        key={activeKey}
         keys={keys}
         active={active}
         onActiveChange={(updated) => setActive(updated)}
@@ -393,12 +430,174 @@ export function ByokSettings() {
       </section>
 
       {/* Add Provider Modal */}
-      <AddProviderModal
-        open={addModalOpen}
-        onClose={() => setAddModalOpen(false)}
-        configuredKeys={keys}
-        onKeySaved={handleKeySaved}
-      />
+      {addModalOpen && (
+        <AddProviderModal
+          onClose={() => setAddModalOpen(false)}
+          configuredKeys={keys}
+          onKeySaved={handleKeySaved}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Combobox: Model Input with Autocomplete & Custom Typing
+// ─────────────────────────────────────────────────────────────────
+
+function ModelCombobox({
+  models,
+  value,
+  onChange,
+  loading,
+  id,
+  placeholder = "Select or type model identifier…",
+}: {
+  models: string[];
+  value: string;
+  onChange: (val: string) => void;
+  loading: boolean;
+  id?: string;
+  placeholder?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [prevValue, setPrevValue] = useState(value);
+  const [query, setQuery] = useState(value);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Sync internal state when value prop changes externally (standard React render adjustment pattern)
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setQuery(value);
+  }
+
+  // Filter model list based on typed query
+  const filtered = useMemo(() => {
+    if (!query) return models;
+    return models.filter((m) =>
+      m.toLowerCase().includes(query.toLowerCase()),
+    );
+  }, [models, query]);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function handleSelect(modelName: string) {
+    setQuery(modelName);
+    onChange(modelName);
+    setIsOpen(false);
+  }
+
+  function handleInputChange(text: string) {
+    setQuery(text);
+    onChange(text);
+    setIsOpen(true);
+  }
+
+  const isCustom = query.trim().length > 0 && !models.includes(query.trim());
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <input
+          id={id}
+          type="text"
+          value={query}
+          onChange={(e) => handleInputChange(e.target.value)}
+          onFocus={() => setIsOpen(true)}
+          placeholder={loading ? "Fetching models…" : placeholder}
+          className="w-full rounded-xl pl-3.5 pr-9 py-2.5 text-xs font-mono outline-none transition-colors"
+          style={{
+            background: "var(--surface-container)",
+            border: "1px solid var(--outline-variant)",
+            color: "var(--on-surface)",
+            fontSize: "0.85rem",
+          }}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <div className="absolute right-2.5 flex items-center gap-1">
+          {loading ? (
+            <Loader2 size={14} className="animate-spin text-stone-400" />
+          ) : (
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setIsOpen((p) => !p)}
+              className="p-1 text-stone-400 hover:text-stone-200 transition-colors cursor-pointer"
+              title="Toggle model suggestions"
+            >
+              {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isOpen && (
+        <div
+          className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-60 overflow-y-auto rounded-xl p-1.5 shadow-2xl transition-all"
+          style={{
+            background: "var(--surface-high)",
+            border: "1px solid rgba(144,143,160,0.3)",
+            boxShadow: "var(--shadow-float)",
+          }}
+        >
+          {/* Custom typed option if not present in fetched list */}
+          {isCustom && (
+            <button
+              type="button"
+              onClick={() => handleSelect(query.trim())}
+              className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors hover:bg-white/5 cursor-pointer"
+              style={{ color: "var(--primary)" }}
+            >
+              <div className="flex items-center gap-2 truncate font-mono">
+                <span className="truncate">{query.trim()}</span>
+              </div>
+              <span
+                className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
+                style={{ background: "rgba(192,193,255,0.12)", color: "var(--primary)" }}
+              >
+                Custom Model
+              </span>
+            </button>
+          )}
+
+          {/* Filtered suggestions list */}
+          {filtered.length > 0 ? (
+            filtered.map((m) => {
+              const isSelected = m === value;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => handleSelect(m)}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-mono transition-colors hover:bg-white/5 cursor-pointer"
+                  style={{
+                    color: isSelected ? "var(--primary)" : "var(--on-surface)",
+                    fontWeight: isSelected ? "600" : "400",
+                    background: isSelected ? "rgba(192,193,255,0.08)" : "transparent",
+                  }}
+                >
+                  <span className="truncate">{m}</span>
+                  {isSelected && <Check size={12} className="shrink-0 text-indigo-400" />}
+                </button>
+              );
+            })
+          ) : !isCustom ? (
+            <div className="px-3 py-2 text-xs text-stone-400">
+              {loading ? "Loading models…" : "No matching models. Type any model identifier above."}
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
@@ -427,29 +626,8 @@ function ActiveModelPanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const prevActiveRef = useRef<ActiveProvider | null>(null);
   const providerSelectId = useId();
   const modelSelectId = useId();
-
-  // Synchronize internal state ONLY when external active prop actually changes or initializes
-  useEffect(() => {
-    if (
-      active &&
-      (!prevActiveRef.current ||
-        prevActiveRef.current.provider !== active.provider ||
-        prevActiveRef.current.model !== active.model)
-    ) {
-      prevActiveRef.current = active;
-      setSelectedProvider(active.provider);
-      setSelectedModel(active.model);
-    } else if (
-      !active &&
-      configuredProviders.length > 0 &&
-      !configuredProviders.includes(selectedProvider)
-    ) {
-      setSelectedProvider(configuredProviders[0]);
-    }
-  }, [active, configuredProviders, selectedProvider]);
 
   // Load models whenever the selected provider changes
   useEffect(() => {
@@ -457,7 +635,6 @@ function ActiveModelPanel({
     async function loadModels() {
       const session = getAuthSession();
       if (!session?.accessToken || !configuredProviders.includes(selectedProvider)) {
-        setModels([]);
         return;
       }
       setLoadingModels(true);
@@ -465,19 +642,13 @@ function ActiveModelPanel({
         const res = await fetchProviderModels(selectedProvider, session.accessToken);
         if (!isCancelled) {
           setModels(res.models);
-          // If selected provider is currently active, preserve active model if available
-          if (active?.provider === selectedProvider && res.models.includes(active.model)) {
-            setSelectedModel(active.model);
-          } else if (res.models.length > 0) {
+          if (res.models.length > 0 && !selectedModel) {
             setSelectedModel(res.models[0]);
-          } else {
-            setSelectedModel("");
           }
         }
       } catch {
         if (!isCancelled) {
           setModels([]);
-          setSelectedModel("");
         }
       } finally {
         if (!isCancelled) {
@@ -488,19 +659,17 @@ function ActiveModelPanel({
 
     if (configuredProviders.includes(selectedProvider)) {
       void loadModels();
-    } else {
-      setModels([]);
-      setSelectedModel("");
     }
 
     return () => {
       isCancelled = true;
     };
-  }, [selectedProvider, configuredProviders, active?.provider, active?.model]);
+  }, [selectedProvider, configuredProviders, selectedModel]);
 
   async function handleSetActive(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedModel || !configuredProviders.includes(selectedProvider)) return;
+    const modelToSet = selectedModel.trim();
+    if (!modelToSet || !configuredProviders.includes(selectedProvider)) return;
 
     const session = getAuthSession();
     if (!session?.accessToken) return;
@@ -510,9 +679,8 @@ function ActiveModelPanel({
     setSaveSuccess(false);
 
     try {
-      await setActiveProvider(selectedProvider, selectedModel, session.accessToken);
-      const newActive = { provider: selectedProvider, model: selectedModel };
-      prevActiveRef.current = newActive;
+      await setActiveProvider(selectedProvider, modelToSet, session.accessToken);
+      const newActive = { provider: selectedProvider, model: modelToSet };
       onActiveChange(newActive);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -531,18 +699,20 @@ function ActiveModelPanel({
 
   return (
     <div
-      className="relative overflow-hidden rounded-2xl p-6"
+      className="relative rounded-2xl p-6"
       style={{
         background: "var(--surface-low)",
         border: "1px solid rgba(192,193,255,0.18)",
         boxShadow: "var(--shadow-card)",
       }}
     >
-      {/* Background accent glow */}
-      <div
-        className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full blur-3xl opacity-20"
-        style={{ background: activeMeta?.color ?? "var(--primary)" }}
-      />
+      {/* Background accent glow - isolated in overflow-hidden layer */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+        <div
+          className="absolute -right-16 -top-16 h-48 w-48 rounded-full blur-3xl opacity-20"
+          style={{ background: activeMeta?.color ?? "var(--primary)" }}
+        />
+      </div>
 
       <div className="flex flex-col gap-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -610,7 +780,7 @@ function ActiveModelPanel({
                   {activeMeta?.name ?? active.provider}
                 </span>
                 <span
-                  className="text-xs font-mono font-medium max-w-[220px] truncate"
+                  className="text-xs font-mono font-medium max-w-[240px] truncate"
                   style={{ color: "var(--on-surface)" }}
                   title={active.model}
                 >
@@ -688,70 +858,35 @@ function ActiveModelPanel({
               </select>
             </div>
 
-            {/* Model selection */}
+            {/* Editable / Selectable Model Combobox */}
             <div className="sm:col-span-5 flex flex-col gap-1.5">
               <label
                 htmlFor={modelSelectId}
                 className="text-xs font-semibold flex items-center justify-between"
                 style={{ color: "var(--on-surface-variant)", fontFamily: "var(--font-space-grotesk)" }}
               >
-                <span>Model Engine</span>
+                <span>Model Engine (Select or Type)</span>
                 {models.length > 0 && (
                   <span className="text-[11px] font-normal" style={{ color: "var(--outline)" }}>
                     {models.length} available
                   </span>
                 )}
               </label>
-              {loadingModels ? (
-                <div
-                  className="flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm"
-                  style={{
-                    background: "var(--surface-container)",
-                    border: "1px solid var(--outline-variant)",
-                    color: "var(--on-surface-variant)",
-                  }}
-                >
-                  <Loader2 size={15} className="animate-spin" style={{ color: "var(--primary)" }} />
-                  <span className="text-xs">Fetching provider models…</span>
-                </div>
-              ) : models.length > 0 ? (
-                <select
-                  id={modelSelectId}
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full rounded-xl px-3.5 py-2.5 text-sm font-mono outline-none transition-colors cursor-pointer"
-                  style={{
-                    background: "var(--surface-container)",
-                    border: "1px solid var(--outline-variant)",
-                    color: "var(--on-surface)",
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  {models.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div
-                  className="flex items-center rounded-xl px-3.5 py-2.5 text-xs"
-                  style={{
-                    background: "var(--surface-container)",
-                    border: "1px solid var(--outline-variant)",
-                    color: "var(--outline)",
-                  }}
-                >
-                  No models available for this provider.
-                </div>
-              )}
+              <ModelCombobox
+                id={modelSelectId}
+                models={models}
+                value={selectedModel}
+                onChange={(val) => setSelectedModel(val)}
+                loading={loadingModels}
+                placeholder="e.g. gpt-4o, claude-3-5-sonnet, llama-3.3-70b…"
+              />
             </div>
 
             {/* Set Active Button */}
             <div className="sm:col-span-3">
               <button
                 type="submit"
-                disabled={savingActive || !selectedModel || loadingModels}
+                disabled={savingActive || !selectedModel.trim()}
                 className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 px-4 text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-50 cursor-pointer"
                 style={{
                   background: saveSuccess ? "var(--surface-container)" : "var(--gradient-cta)",
@@ -799,21 +934,23 @@ function ActiveModelPanel({
 // ─────────────────────────────────────────────────────────────────
 
 function AddProviderModal({
-  open,
   onClose,
   configuredKeys,
   onKeySaved,
 }: {
-  open: boolean;
   onClose: () => void;
   configuredKeys: LlmProviderKey[];
   onKeySaved: (key: LlmProviderKey, models: string[]) => void;
 }) {
-  const configuredProviderIds = configuredKeys.map((k) => k.provider.toUpperCase());
+  const configuredProviderIds = useMemo(
+    () => configuredKeys.map((k) => k.provider.toUpperCase()),
+    [configuredKeys],
+  );
 
-  // Default to first unconfigured provider or NVIDIA
-  const defaultProvider =
-    KNOWN_PROVIDERS.find((p) => !configuredProviderIds.includes(p.id))?.id ?? "NVIDIA";
+  const defaultProvider = useMemo(
+    () => KNOWN_PROVIDERS.find((p) => !configuredProviderIds.includes(p.id))?.id ?? "NVIDIA",
+    [configuredProviderIds],
+  );
 
   const [selectedProviderId, setSelectedProviderId] = useState<string>(defaultProvider);
   const [customProviderName, setCustomProviderName] = useState("");
@@ -829,30 +966,14 @@ function AddProviderModal({
     ? getProviderMeta(customProviderName || "Custom")
     : getProviderMeta(selectedProviderId);
 
-  // Update default provider when modal opens
-  useEffect(() => {
-    if (open) {
-      const firstAvailable =
-        KNOWN_PROVIDERS.find((p) => !configuredProviderIds.includes(p.id))?.id ?? "NVIDIA";
-      setSelectedProviderId(firstAvailable);
-      setCustomProviderName("");
-      setApiKey("");
-      setBaseUrl("");
-      setSaveError(null);
-    }
-  }, [open, configuredProviderIds.join(",")]);
-
   // Handle escape key
   useEffect(() => {
-    if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
+  }, [onClose]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -876,7 +997,7 @@ function AddProviderModal({
         provider: effectiveProviderId,
         maskedKey: res.maskedKey,
         updatedAt: new Date().toISOString(),
-        baseUrl: baseUrl.trim() ? baseUrl.trim() : null,
+        nvidiaBaseUrl: baseUrl.trim() ? baseUrl.trim() : null,
       };
 
       onKeySaved(createdKey, res.models);
@@ -1211,7 +1332,7 @@ function ProviderCard({
   const [formOpen, setFormOpen] = useState(false);
   const [showKeyText, setShowKeyText] = useState(false);
   const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState(existingKey.baseUrl ?? existingKey.nvidiaBaseUrl ?? "");
+  const [baseUrl, setBaseUrl] = useState(existingKey.nvidiaBaseUrl ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -1255,7 +1376,7 @@ function ProviderCard({
         provider: meta.id,
         maskedKey: res.maskedKey,
         updatedAt: new Date().toISOString(),
-        baseUrl: baseUrl.trim() ? baseUrl.trim() : null,
+        nvidiaBaseUrl: baseUrl.trim() ? baseUrl.trim() : null,
       };
 
       setModels(res.models);
@@ -1320,10 +1441,13 @@ function ProviderCard({
     const session = getAuthSession();
     if (!session?.accessToken) return;
 
-    setSettingModel(modelName);
+    const trimmedModel = modelName.trim();
+    if (!trimmedModel) return;
+
+    setSettingModel(trimmedModel);
     try {
-      await setActiveProvider(meta.id, modelName, session.accessToken);
-      onSelectAsActive(meta.id, modelName);
+      await setActiveProvider(meta.id, trimmedModel, session.accessToken);
+      onSelectAsActive(meta.id, trimmedModel);
     } catch (err) {
       setModelsError(
         err instanceof LlmProviderApiError
@@ -1338,6 +1462,10 @@ function ProviderCard({
   const filteredModels = models.filter((m) =>
     m.toLowerCase().includes(modelSearch.toLowerCase()),
   );
+
+  const isCustomSearch =
+    modelSearch.trim().length > 0 &&
+    !models.some((m) => m.toLowerCase() === modelSearch.trim().toLowerCase());
 
   return (
     <div
@@ -1530,13 +1658,13 @@ function ProviderCard({
             </span>
           </div>
 
-          {(existingKey.baseUrl || existingKey.nvidiaBaseUrl) && (
+          {existingKey.nvidiaBaseUrl && (
             <div
               className="flex items-center gap-1 text-[11px] font-mono mt-1 pt-1.5 border-t truncate"
               style={{ borderColor: "rgba(70,69,84,0.2)", color: "var(--on-surface-variant)" }}
             >
               <Server size={11} className="shrink-0" />
-              <span className="truncate">{existingKey.baseUrl ?? existingKey.nvidiaBaseUrl}</span>
+              <span className="truncate">{existingKey.nvidiaBaseUrl}</span>
             </div>
           )}
         </div>
@@ -1686,7 +1814,7 @@ function ProviderCard({
               <Layers size={13} style={{ color: meta.color }} />
               {models.length > 0
                 ? `${models.length} Available Models`
-                : "Explore Available Models"}
+                : "Explore & Select Models"}
             </span>
             {loadingModels ? (
               <Loader2 size={12} className="animate-spin" />
@@ -1703,27 +1831,73 @@ function ProviderCard({
             </p>
           )}
 
-          {modelsOpen && models.length > 0 && (
+          {modelsOpen && (
             <div
-              className="flex flex-col gap-2 rounded-xl p-3 max-h-52 overflow-hidden"
+              className="flex flex-col gap-2.5 rounded-xl p-3 max-h-60 overflow-hidden"
               style={{ background: "var(--surface-container)" }}
             >
-              {models.length > 5 && (
+              {/* Type to search or enter custom model */}
+              <div className="flex flex-col gap-1">
                 <input
                   type="text"
-                  placeholder="Search models…"
+                  placeholder="Search or enter custom model identifier…"
                   value={modelSearch}
                   onChange={(e) => setModelSearch(e.target.value)}
-                  className="w-full rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                  className="w-full rounded-lg px-2.5 py-1.5 text-xs font-mono outline-none"
                   style={{
                     background: "var(--surface-low)",
                     border: "1px solid var(--outline-variant)",
                     color: "var(--on-surface)",
-                    fontFamily: "var(--font-inter)",
                   }}
                 />
+              </div>
+
+              {/* Option to use custom typed model */}
+              {isCustomSearch && (
+                <div
+                  className="flex items-center justify-between gap-2 rounded-lg p-2 transition-colors border"
+                  style={{
+                    background: "rgba(192,193,255,0.06)",
+                    borderColor: "rgba(192,193,255,0.2)",
+                  }}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className="text-[11px] font-mono font-medium truncate"
+                      style={{ color: "var(--primary)" }}
+                      title={modelSearch.trim()}
+                    >
+                      {modelSearch.trim()}
+                    </span>
+                    <span
+                      className="shrink-0 rounded px-1.5 py-0.2 text-[9px] font-semibold uppercase"
+                      style={{ background: "rgba(192,193,255,0.15)", color: "var(--primary)" }}
+                    >
+                      Custom
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleQuickSetActive(modelSearch.trim())}
+                    disabled={settingModel === modelSearch.trim()}
+                    className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                    style={{
+                      background: "var(--gradient-cta)",
+                      color: "#ffffff",
+                      fontFamily: "var(--font-space-grotesk)",
+                    }}
+                  >
+                    {settingModel === modelSearch.trim() ? (
+                      <Loader2 size={11} className="animate-spin" />
+                    ) : (
+                      <Check size={11} />
+                    )}
+                    <span>Set Active</span>
+                  </button>
+                </div>
               )}
 
+              {/* Models scrollable list */}
               <div className="flex flex-col gap-1 overflow-y-auto pr-1">
                 {filteredModels.map((modelName) => {
                   const isCurrent = isActiveProvider && activeModel === modelName;
@@ -1751,14 +1925,14 @@ function ProviderCard({
                           className="flex shrink-0 items-center gap-1 text-[10px] font-semibold"
                           style={{ color: meta.color }}
                         >
-                          <Check size={11} /> Current
+                          <Check size={11} /> Active
                         </span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => void handleQuickSetActive(modelName)}
                           disabled={settingModel === modelName}
-                          className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50 cursor-pointer"
+                          className="flex shrink-0 items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80 disabled:opacity-50 cursor-pointer"
                           style={{
                             background: "var(--surface-low)",
                             color: "var(--primary)",
@@ -1775,6 +1949,12 @@ function ProviderCard({
                     </div>
                   );
                 })}
+
+                {filteredModels.length === 0 && !isCustomSearch && (
+                  <div className="px-2 py-2 text-center text-xs text-stone-400">
+                    {loadingModels ? "Loading models…" : "No models found. Type any custom model name above."}
+                  </div>
+                )}
               </div>
             </div>
           )}
