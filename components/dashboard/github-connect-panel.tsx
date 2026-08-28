@@ -45,10 +45,13 @@ export function GithubConnectPanel() {
   const [selectedRepo, setSelectedRepo] = useState<GithubRepository | null>(null);
   const [prState, setPrState] = useState<PullRequestState>("open");
   const prStateRef = useRef<PullRequestState>(prState);
-  prStateRef.current = prState;
   const [pullRequests, setPullRequests] = useState<GithubPullRequest[]>([]);
   const [prError, setPrError] = useState<string | null>(null);
   const [isLoadingPrs, setIsLoadingPrs] = useState(false);
+
+  useEffect(() => {
+    prStateRef.current = prState;
+  }, [prState]);
 
   const installed = searchParams.get("installed") === "1";
   const callbackError = useMemo(
@@ -86,21 +89,16 @@ export function GithubConnectPanel() {
     [],
   );
 
-  const loadRepositories = useCallback(async (mode: "initial" | "refresh" = "initial") => {
+  const refreshRepositories = useCallback(async () => {
     const session = getAuthSession();
     if (!session?.accessToken) {
       setReposData(null);
       setReposError("Your session is missing an access token. Please sign in again.");
-      setIsLoadingRepos(false);
       setIsRefreshingRepos(false);
       return;
     }
 
-    if (mode === "initial") {
-      setIsLoadingRepos(true);
-    } else {
-      setIsRefreshingRepos(true);
-    }
+    setIsRefreshingRepos(true);
     setReposError(null);
 
     try {
@@ -126,14 +124,58 @@ export function GithubConnectPanel() {
         setReposError("Could not load connected repositories.");
       }
     } finally {
-      setIsLoadingRepos(false);
       setIsRefreshingRepos(false);
     }
   }, [loadPullRequests]);
 
   useEffect(() => {
-    void loadRepositories();
-  }, [loadRepositories, installed]);
+    let cancelled = false;
+    async function loadInitial() {
+      const session = getAuthSession();
+      if (!session?.accessToken) {
+        if (cancelled) return;
+        setReposData(null);
+        setReposError("Your session is missing an access token. Please sign in again.");
+        setIsLoadingRepos(false);
+        return;
+      }
+
+      try {
+        const data = await getRepositories(session.accessToken);
+        if (cancelled) return;
+        setReposData(data);
+        setSelectedRepo((current) => {
+          if (!current) return null;
+          const next = data.repositories.find((repo) => repo.repoId === current.repoId) ?? null;
+          if (next) {
+            void loadPullRequests(next, prStateRef.current);
+          } else {
+            setPullRequests([]);
+            setPrError(null);
+            setIsLoadingPrs(false);
+          }
+          return next;
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setReposData(null);
+        if (err instanceof GithubInstallApiError) {
+          setReposError(err.message);
+        } else {
+          setReposError("Could not load connected repositories.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingRepos(false);
+        }
+      }
+    }
+
+    void loadInitial();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadPullRequests, installed]);
 
   useEffect(() => {
     if (!reposData?.repositories.length || !repoIdFromQuery) return;
@@ -284,7 +326,7 @@ export function GithubConnectPanel() {
             data={reposData}
             isRefreshing={isRefreshingRepos}
             onRefresh={() => {
-              void loadRepositories("refresh");
+              void refreshRepositories();
             }}
             selectedRepoId={selectedRepo?.repoId ?? null}
             onSelectRepo={(repoId) => {

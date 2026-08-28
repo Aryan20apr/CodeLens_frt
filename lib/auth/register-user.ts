@@ -1,4 +1,5 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { extractApiErrorMessage, unwrapApiResponse } from "@/lib/api-response";
 import type { ApiErrorBody, RegisterResponse } from "@/lib/auth/types";
 
 export class RegisterApiError extends Error {
@@ -13,8 +14,7 @@ export class RegisterApiError extends Error {
 }
 
 function parseErrorBody(data: unknown): ApiErrorBody {
-  if (data && typeof data === "object" && "message" in data)
-    return data as ApiErrorBody;
+  if (data && typeof data === "object") return data as ApiErrorBody;
   return {};
 }
 
@@ -35,12 +35,9 @@ export async function registerUser(body: RegisterRequestBody): Promise<RegisterR
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
     const errBody = parseErrorBody(data);
-    const message =
-      typeof errBody.message === "string" && errBody.message.length > 0
-        ? errBody.message
-        : "Registration failed";
+    const message = extractApiErrorMessage(data, "Registration failed");
     throw new RegisterApiError(message, res.status, errBody);
   }
 
-  return data as RegisterResponse;
+  return unwrapApiResponse<RegisterResponse>(data);
 }

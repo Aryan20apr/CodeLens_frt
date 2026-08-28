@@ -69,49 +69,58 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
   const diffView = parseDiffViewType(searchParams.get("view"));
   const [selectedFileKey, setSelectedFileKey] = useState<string | null>(fileFromQuery);
 
-  const loadDiff = useCallback(async () => {
-    if (pullNumber == null) {
-      setError("Invalid pull request number.");
-      setIsLoading(false);
-      return;
-    }
-
-    const session = getAuthSession();
-    if (!session?.accessToken) {
-      setError("Your session is missing an access token. Please sign in again.");
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const [prDetail, prFiles] = await Promise.all([
-        getPullRequest(session.accessToken, repoId, pullNumber),
-        getPullRequestFiles(session.accessToken, repoId, pullNumber),
-      ]);
-      setDetail(prDetail);
-      setFiles(prFiles);
-
-      const match = prDetail.htmlUrl.match(/github\.com\/([^/]+\/[^/]+)\//i);
-      setRepoFullName(match?.[1] ?? null);
-    } catch (err) {
-      setDetail(null);
-      setFiles([]);
-      if (err instanceof GithubInstallApiError) {
-        setError(err.message);
-      } else {
-        setError("Could not load pull request diff.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [repoId, pullNumber]);
-
   useEffect(() => {
-    void loadDiff();
-  }, [loadDiff]);
+    let cancelled = false;
+    async function load() {
+      if (pullNumber == null) {
+        if (!cancelled) {
+          setError("Invalid pull request number.");
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      const session = getAuthSession();
+      if (!session?.accessToken) {
+        if (!cancelled) {
+          setError("Your session is missing an access token. Please sign in again.");
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const [prDetail, prFiles] = await Promise.all([
+          getPullRequest(session.accessToken, repoId, pullNumber),
+          getPullRequestFiles(session.accessToken, repoId, pullNumber),
+        ]);
+        if (cancelled) return;
+        setDetail(prDetail);
+        setFiles(prFiles);
+
+        const match = prDetail.htmlUrl.match(/github\.com\/([^/]+\/[^/]+)\//i);
+        setRepoFullName(match?.[1] ?? null);
+      } catch (err) {
+        if (cancelled) return;
+        setDetail(null);
+        setFiles([]);
+        if (err instanceof GithubInstallApiError) {
+          setError(err.message);
+        } else {
+          setError("Could not load pull request diff.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [repoId, pullNumber]);
 
   useEffect(() => {
     return () => {
@@ -159,19 +168,21 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
     })();
   }, []);
 
-  useEffect(() => {
-    if (files.length === 0) return;
+  const effectiveSelectedFileKey = useMemo(() => {
+    if (files.length === 0) return null;
     const keys = files.map(pullRequestFileKey);
-    const preferred =
-      fileFromQuery && keys.includes(fileFromQuery) ? fileFromQuery : (keys[0] ?? null);
-    setSelectedFileKey((current) =>
-      current && keys.includes(current) ? current : preferred,
-    );
-  }, [files, fileFromQuery]);
+    if (selectedFileKey && keys.includes(selectedFileKey)) {
+      return selectedFileKey;
+    }
+    if (fileFromQuery && keys.includes(fileFromQuery)) {
+      return fileFromQuery;
+    }
+    return keys[0] ?? null;
+  }, [files, selectedFileKey, fileFromQuery]);
 
   const selectedFile = useMemo(
-    () => files.find((file) => pullRequestFileKey(file) === selectedFileKey) ?? null,
-    [files, selectedFileKey],
+    () => files.find((file) => pullRequestFileKey(file) === effectiveSelectedFileKey) ?? null,
+    [files, effectiveSelectedFileKey],
   );
 
   function updateSearchParams(patch: (params: URLSearchParams) => void) {
@@ -397,7 +408,7 @@ export function GithubPrDiffPage({ repoId, pullNumber: pullNumberParam }: Github
         <div className="flex min-h-0 flex-1">
           <GithubPrFileSidebar
             files={files}
-            selectedKey={selectedFileKey}
+            selectedKey={effectiveSelectedFileKey}
             onSelect={handleSelectFile}
           />
           <div

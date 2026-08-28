@@ -67,18 +67,17 @@ export function Sidebar() {
     if (logoutPending) return;
     setLogoutDialogOpen(false);
     setLogoutPending(true);
-    const session = getAuthSession();
     try {
-      if (session?.accessToken) {
+      const session = getAuthSession();
+      if (session) {
         await logoutWithAccessToken(session.accessToken);
       }
-    } catch {
-      // Still clear local session if the request fails
+    } catch (error) {
+      console.warn("API logout failed, continuing with local logout:", error);
     } finally {
       clearAuthSession();
       setLogoutPending(false);
-      router.push("/login");
-      router.refresh();
+      window.location.href = "/login";
     }
   }
 

@@ -1,17 +1,10 @@
 import { apiBaseUrl } from "@/lib/api-config";
+import { extractApiErrorMessage } from "@/lib/api-response";
 import { authFetch } from "@/lib/auth/auth-fetch";
 import { GithubInstallApiError } from "@/lib/github/github-install";
 
 export interface LinkGithubInstallationRequest {
   installationId: number;
-}
-
-function getErrorMessage(data: unknown): string {
-  if (data && typeof data === "object" && "message" in data) {
-    const message = (data as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim().length > 0) return message;
-  }
-  return "Could not link GitHub installation";
 }
 
 export async function linkGithubInstallation(
@@ -33,6 +26,10 @@ export async function linkGithubInstallation(
 
   const data: unknown = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new GithubInstallApiError(getErrorMessage(data), res.status, data);
+    throw new GithubInstallApiError(
+      extractApiErrorMessage(data, "Could not link GitHub installation"),
+      res.status,
+      data,
+    );
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { tryRefreshSession } from "@/lib/auth/refresh-session";
 import { getAuthResolutionState, setAuthResolutionState } from "@/lib/auth/auth-resolution";
@@ -23,26 +23,27 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
   const [state, setState] = useState<GuardState>("resolving");
 
   // Initial resolve: in-memory / session access token, else cookie-based refresh.
-  useLayoutEffect(() => {
-    const cached = getAuthResolutionState();
-    const signedIn = isSignedIn();
-    if (cached === "authed" && signedIn) {
-      setState("authed");
-      return;
-    }
-    if (cached === "unauthed" && !signedIn) {
-      setState("unauthed");
-      return;
-    }
-
-    if (signedIn) {
-      setAuthResolutionState("authed");
-      setState("authed");
-      return;
-    }
-
+  useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void Promise.resolve().then(async () => {
+      if (cancelled) return;
+      const cached = getAuthResolutionState();
+      const signedIn = isSignedIn();
+      if (cached === "authed" && signedIn) {
+        setState("authed");
+        return;
+      }
+      if (cached === "unauthed" && !signedIn) {
+        setState("unauthed");
+        return;
+      }
+
+      if (signedIn) {
+        setAuthResolutionState("authed");
+        setState("authed");
+        return;
+      }
+
       const next = await tryRefreshSession();
       if (cancelled) return;
       if (next) {
@@ -53,7 +54,7 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
         setAuthResolutionState("unauthed");
         setState("unauthed");
       }
-    })();
+    });
     return () => {
       cancelled = true;
     };
@@ -87,7 +88,7 @@ export function RouteGuard({ mode, children }: RouteGuardProps) {
   useEffect(() => {
     if (state === "resolving") return;
     if (mode === "protected" && state === "unauthed") {
-      router.replace("/login");
+      window.location.href = "/login";
     }
     if (mode === "guest-only" && state === "authed") {
       router.replace("/dashboard");
